@@ -21,9 +21,12 @@ Success is verified by the builder chip: free builders must drop below the pre-c
 reading. ``dry`` mode still only logs its decision.
 '''
 import difflib
+import cv2
 import time
 from dataclasses import dataclass, replace
 from typing import List, Optional, Tuple
+from types import SimpleNamespace
+from app.utils.common import get_resource_path
 
 from app.config import ASPECT_16_10, ASPECT_16_9
 from app.core.upgrade_menu import (
@@ -206,7 +209,7 @@ class UpgradeAdvisor:
                 # The popup reopens at its LAST scroll position — wheel back to the
                 # top so every parse starts at the section headers.
                 self.input.scroll(*self._scroll_point(), _RESET_TO_TOP_WHEEL_CLICKS, upward = True)
-                return not self.stop_event.wait(0.6)
+                return not self.stop_event.wait(1.0)
         logger.info('Upgrade advisor: builder portrait not found — skipping')
         return False
 
@@ -250,7 +253,7 @@ class UpgradeAdvisor:
             if stale >= _STALE_STEPS_AT_LIST_END:
                 break
             self.input.scroll(*self._scroll_point(), _WHEEL_CLICKS)
-            if self.stop_event.wait(0.45):
+            if self.stop_event.wait(1.0):
                 break
         self._close_popup()
         return ScanResult(rows = rows, chip = chip, hud = hud)
@@ -292,7 +295,8 @@ class UpgradeAdvisor:
                 continue
             match = None
             for p in prev:
-                if p.cost == row.cost and _labels_match(row.label, p.label, 0.7):
+                if (p.cost == row.cost and _labels_match(row.label, p.label, 0.7)
+                        and not (p.resource and row.resource and p.resource != row.resource)):
                     match = p
                     break
             if match is None:
@@ -389,8 +393,11 @@ class UpgradeAdvisor:
         if near_y is not None:
             tol = self.config.scale_scalar(_EXEC_ROW_STABLE_TOL)
             for row in rows:
-                if (row.section != SECTION_IN_PROGRESS and row.cost is not None
-                        and row.cost == pick.cost and abs(row.line_y - near_y) <= tol):
+                if (row.section != SECTION_IN_PROGRESS and row.affordable is True
+                        and row.cost is not None and row.cost == pick.cost
+                        and row.resource == pick.resource
+                        and _labels_match(row.label, pick.label, 0.6)
+                        and abs(row.line_y - near_y) <= tol):
                     return (row.center, section)
         return (None, section)
 
@@ -437,7 +444,7 @@ class UpgradeAdvisor:
             if scrolls >= _MAX_SCROLL_STEPS:
                 break
             self.input.scroll(*self._scroll_point(), _WHEEL_CLICKS)
-            if self.stop_event.wait(0.45):
+            if self.stop_event.wait(1.0):
                 return False
         if not row_pt:
             # The two-scan re-find is the phantom-row filter: OCR junk (village pixels
@@ -530,6 +537,16 @@ class UpgradeAdvisor:
 
         confirms = [w for w in words if self._word_is(w.text, 'confirm')]
         upgrades = [w for w in words if self._word_is(w.text, 'upgrade') and not has_time_neighbor(w)]
+        def resource_button(w):
+            # Magic-item Upgrade buttons use a saturated blue skin and can sit
+            # slightly lower than the resource button. Never pick by y alone.
+            x0, x1 = max(0, w.left-8), min(fw, w.left+w.width+8)
+            y0, y1 = max(0, w.top-4*w.height), min(fh, w.top+w.height)
+            hsv = cv2.cvtColor(frame[y0:y1, x0:x1], cv2.COLOR_BGR2HSV)
+            blue = (hsv[:,:,0] >= 90) & (hsv[:,:,0] <= 130) & (hsv[:,:,1] >= 90) & (hsv[:,:,2] >= 80)
+            return float(blue.mean()) < .15
+        confirms = [w for w in confirms if resource_button(w)]
+        upgrades = [w for w in upgrades if resource_button(w)]
         pool = confirms or upgrades
         if not pool:
             return None
@@ -539,10 +556,16 @@ class UpgradeAdvisor:
         (wx, wy) = (word.left + word.width // 2, word.top + word.height // 2)
         # Gem guard: an unaffordable confirm button renders its cost in red right under
         # the word. Sample the patch around/below it — any red vetoes the click.
-        px0 = max(0, word.left - word.width)
-        px1 = min(fw, word.left + 2 * word.width)
-        py0 = max(0, word.top - word.height)
-        py1 = min(fh, word.top + 3 * word.height)
+        px0 = max(0, word.left - word.height)
+        px1 = min(fw, word.left + word.width)
+        if word.top > fh * .80 and not confirms:
+            # Bottom-bar prices sit ABOVE Upgrade. The old patch sampled the
+            # hammer illustration and village below it, falsely rejecting white prices.
+            py0 = max(0, word.top - 5 * word.height)
+            py1 = max(py0+1, word.top - 2 * word.height)
+        else:
+            py0 = word.top + word.height
+            py1 = min(fh, word.top + 3 * word.height)
         redness = VisionService.red_hue_fraction(frame[py0:py1, px0:px1])
         if redness >= _EXEC_RED_VETO_FRACTION:
             logger.warning('Upgrade exec: Upgrade word found but cost zone reads red (%.2f) — vetoing the click', redness)
@@ -628,6 +651,61 @@ class UpgradeAdvisor:
             return None
         return (cx, cy)
 
+    def _find_crafting_confirm(self, frame, pick):
+        """The selected seasonal component has its own mid-screen Confirm.
+
+        Require the crafting footer, green button, exact price and currency.
+        Other component Upgrade buttons and magic-item buttons are never used.
+        """
+        h, w = frame.shape[:2]
+        footer = self.vision.find_words_ocr(
+            frame, region=(round(w*.47), round(h*.81), round(w*.30), round(h*.06)),
+            preprocess=False, roi_upscale=2)
+        if not any(self._word_is(word.text, 'crafting', .85) for word in footer):
+            return None
+        words = self.vision.find_words_ocr(
+            frame, region=(round(w*.775), round(h*.19), round(w*.11), round(h*.49)),
+            white_text=True, brightness_floor=200, roi_upscale=3)
+        if not any(self._word_is(word.text, 'confirm', .75) for word in words):
+            words = self.vision.find_words_ocr(
+                frame, region=(round(w*.775), round(h*.19), round(w*.11), round(h*.49)),
+                preprocess=False, roi_upscale=3)
+        if not any(self._word_is(word.text, 'confirm', .75) for word in words):
+            art = cv2.imread(str(get_resource_path('templates/events/crafting_confirm.png')), 0)
+            if art is not None:
+                art = cv2.resize(art, (max(1,round(art.shape[1]*h/1440)), max(1,round(art.shape[0]*h/1440))))
+                rx, ry = round(w*.775), round(h*.19)
+                roi = cv2.cvtColor(frame[ry:round(h*.68),rx:round(w*.885)],cv2.COLOR_BGR2GRAY)
+                if roi.shape[0]>=art.shape[0] and roi.shape[1]>=art.shape[1]:
+                    _,score,_,loc=cv2.minMaxLoc(cv2.matchTemplate(roi,art,cv2.TM_CCOEFF_NORMED))
+                    if score>=.82:
+                        words=[SimpleNamespace(text='confirm',left=rx+loc[0],top=ry+loc[1],width=art.shape[1],height=art.shape[0])]
+        for word in words:
+            if not self._word_is(word.text, 'confirm', .75):
+                continue
+            x0, x1 = round(w*.775), round(w*.862)
+            y0, y1 = word.top+word.height, min(h, word.top+3*word.height)
+            price_words = self.vision.find_words_ocr(
+                frame, region=(x0,y0,x1-x0,y1-y0), white_text=True, brightness_floor=200, roi_upscale=3,
+                tesseract_config='--psm 7 -c tessedit_char_whitelist=0123456789')
+            digits = ''.join(c for token in price_words for c in token.text if c.isdigit())
+            if not digits or int(digits) != pick.cost:
+                continue
+            icon = frame[y0:y1, round(w*.862):round(w*.885)]
+            icon_hsv = cv2.cvtColor(icon, cv2.COLOR_BGR2HSV)
+            gold = float(((icon_hsv[:,:,0]>=15)&(icon_hsv[:,:,0]<=32)&(icon_hsv[:,:,1]>90)&(icon_hsv[:,:,2]>140)).mean())
+            pink = VisionService.pink_fraction(icon)
+            vivid = VisionService.pink_fraction(icon, val_floor=170)
+            resource = 'elixir' if vivid >= .08 else ('gold' if gold >= .08 else ('dark_elixir' if pink >= .10 else None))
+            if resource != pick.resource:
+                continue
+            button = frame[max(0,word.top-word.height//2):y1, x0:round(w*.885)]
+            hsv = cv2.cvtColor(button, cv2.COLOR_BGR2HSV)
+            green = (hsv[:,:,0]>=30)&(hsv[:,:,0]<=85)&(hsv[:,:,1]>70)&(hsv[:,:,2]>90)
+            if float(green.mean()) >= .20 and VisionService.red_hue_fraction(button) < _EXEC_RED_VETO_FRACTION:
+                return word.left+word.width//2, word.top+word.height//2
+        return None
+
     def _walk_upgrade_chain(self, pick):
         '''After the row click: hunt and click "Upgrade" up to twice (bottom bar →
         confirm dialog). True when at least one Upgrade was clicked and the chain went
@@ -663,7 +741,9 @@ class UpgradeAdvisor:
                         return False
                     continue
                 name_ok = True
-            pt = self._find_upgrade_word(frame)
+            pt = self._find_crafting_confirm(frame, pick)
+            if pt is None:
+                pt = self._find_upgrade_word(frame)
             if pt is None and clicks >= 1:
                 # Mid-chain (bottom-bar Upgrade already clicked): the confirm dialog
                 # is expected — fall back to the color/position blob when the word

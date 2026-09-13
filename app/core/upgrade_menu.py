@@ -189,6 +189,12 @@ def _ocr_label_words(frame):
     polarities and keeps the richer pass. Single-char words are dropped (time units
     H/M, multiplier x) — no building name has them.'''
     (fh, fw) = frame.shape[:2]
+    if fw / fh > 1.7:
+        roi = (round(fw*.402), round(fh*.12), round(fw*.128), round(fh*.50))
+        return [w for w in VisionService.find_words_ocr(
+            frame, region=roi, white_text=True, brightness_floor=180,
+            roi_upscale=3, tesseract_config='--psm 6')
+            if len(w.text.strip()) >= 2]
     x_min = int(fw * _LABEL_X_MIN_FRAC)
     x_max = int(fw * _LABEL_X_MAX_FRAC)
     y_min = int(fh * _ROW_Y_MIN_FRAC)
@@ -229,12 +235,32 @@ def parse_builder_menu(frame, initial_section = ''):
     # White-cost digits as raw per-line char clusters, so multiplier digits ("x4") can
     # be split off by x-gap; the rightmost segment inside the cost column is the cost.
     char_clusters = []
-    VisionService.extract_grouped_numbers_in_region(
-        frame, roi, white_text = True, cc_filter_blobs = False,
-        allow_hud_ocr_debug = True, hud_debug_char_clusters_out = char_clusters)
+    if fw / fh <= 1.7:
+        VisionService.extract_grouped_numbers_in_region(
+            frame, roi, white_text = True, cc_filter_blobs = False,
+            allow_hud_ocr_debug = True, hud_debug_char_clusters_out = char_clusters)
     cost_x_min = int(fw * _COST_X_MIN_FRAC)
     cost_x_max = int(fw * _COST_X_MAX_FRAC)
     costs = []  # (line_cy, value, bbox)
+    if fw / fh > 1.7:
+        # Read the complete cost column without clipping leading digits or
+        # binarizing away their thin strokes. Exclude red, unaffordable text.
+        cost_roi = (round(fw*.535), round(fh*.12), round(fw*.080), round(fh*.50))
+        words = VisionService.find_words_ocr(
+            frame, region=cost_roi, preprocess=False, roi_upscale=4,
+            tesseract_config='--psm 6 -c tessedit_char_whitelist=0123456789')
+        for word in words:
+            text = word.text.strip()
+            if not text.isdigit() or len(text) < _MIN_COST_DIGITS:
+                continue
+            value = int(text)
+            if not _MIN_COST_VALUE <= value <= _MAX_COST_VALUE or value % 100:
+                continue
+            bbox = (word.left, word.top, word.width, word.height)
+            patch = frame[word.top:word.top+word.height, word.left:word.left+word.width]
+            if VisionService.red_hue_fraction(patch) >= _RED_COST_FRACTION:
+                continue
+            costs.append((word.top+word.height*.5, value, bbox))
     for chars in char_clusters:
         segments_dbg = _split_digit_segments(chars)
         if segments_dbg and logger.isEnabledFor(10):
