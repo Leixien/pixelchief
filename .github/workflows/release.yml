@@ -1,0 +1,92 @@
+name: Build Windows release
+
+# Tag pushes cut a release; manual runs build the exe and leave it as a
+# workflow artifact so the build can be checked without publishing anything.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      # tesseract_bundle/ is gitignored (~40 MB of Apache-2.0 binaries), so the
+      # build recreates it from the UB-Mannheim Tesseract 5 install that the
+      # Chocolatey package ships.
+      - name: Install Tesseract 5
+        run: choco install tesseract --no-progress -y
+
+      - name: Stage tesseract_bundle
+        shell: pwsh
+        run: |
+          $root = 'C:\Program Files\Tesseract-OCR'
+          if (-not (Test-Path $root)) { throw "Tesseract install not found at $root" }
+          New-Item -ItemType Directory -Force -Path tesseract_bundle | Out-Null
+          Copy-Item "$root\*" -Destination tesseract_bundle -Recurse -Force
+          # main.py points TESSERACT_CMD at <bundle>/tesseract.exe and
+          # tesseract_env.py derives TESSDATA_PREFIX as its sibling tessdata/.
+          foreach ($required in 'tesseract_bundle\tesseract.exe', 'tesseract_bundle\tessdata\eng.traineddata') {
+            if (-not (Test-Path $required)) { throw "Missing $required after staging" }
+          }
+
+      # No UPX on the runner, so PyInstaller skips the spec's upx=True and emits
+      # a larger but uncompressed exe. That is deliberate: UPX is known to corrupt
+      # Qt DLLs, and an oversized exe beats one that will not start.
+      - name: Build BasePilot.exe
+        run: pyinstaller --noconfirm --clean BasePilot.spec
+
+      - name: Verify build output
+        shell: pwsh
+        run: |
+          $exe = 'dist\BasePilot.exe'
+          if (-not (Test-Path $exe)) { throw 'Build produced no dist\BasePilot.exe' }
+          $mb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
+          if ($mb -lt 30) { throw "BasePilot.exe is only $mb MB - the bundle looks incomplete" }
+          Write-Host "BasePilot.exe: $mb MB"
+          (Get-FileHash $exe -Algorithm SHA256).Hash | Tee-Object -FilePath dist\BasePilot.exe.sha256
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BasePilot-windows
+          path: |
+            dist/BasePilot.exe
+            dist/BasePilot.exe.sha256
+          retention-days: 14
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          assets=(dist/BasePilot.exe dist/BasePilot.exe.sha256)
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${assets[@]}" --clobber
+          else
+            notes=".github/release-notes/$tag.md"
+            if [ -f "$notes" ]; then
+              gh release create "$tag" "${assets[@]}" --title "BasePilot $tag" --notes-file "$notes"
+            else
+              gh release create "$tag" "${assets[@]}" --title "BasePilot $tag" --generate-notes
+            fi
+          fi
