@@ -52,6 +52,23 @@ jobs:
       - name: Build BasePilot.exe
         run: pyinstaller --noconfirm --clean BasePilot.spec
 
+      - name: Run regression tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Verify executable startup
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $smoke = Start-Process -FilePath (Resolve-Path 'dist\BasePilot.exe') -ArgumentList '--profile', 'release-smoke' -WindowStyle Hidden -PassThru
+          try {
+            Start-Sleep -Seconds 20
+            $smoke.Refresh()
+            if ($smoke.HasExited) { throw "BasePilot exited during startup (code $($smoke.ExitCode))" }
+          } finally {
+            if (-not $smoke.HasExited) { Stop-Process -Id $smoke.Id }
+          }
+
       - name: Verify build output
         shell: pwsh
         run: |

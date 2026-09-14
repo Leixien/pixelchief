@@ -30,6 +30,7 @@ class AttackStrategy:
         self.config = config
         self.stop_event = stop_event
         self.earthquake_method = earthquake_method
+        self.event_handler = None
         self.CORNER_ORDER = [
             'left',
             'top',
@@ -191,6 +192,34 @@ class AttackStrategy:
     def _sync_frame_size(self, frame):
         self.config.set_target_size_from_frame(frame)
 
+    def _reward_checkpoint(self, frame=None, selected=None):
+        """Clear event overlays before input; reselect a displaced troop/spell.
+
+        Return a current frame and whether a choice interrupted deployment.
+        A missing capture or a stuck overlay must stop further battle clicks.
+        """
+        if self.stop_event and self.stop_event.is_set():
+            raise InterruptedError('Bot stopped by user')
+        if self.event_handler is None:
+            return frame, False
+        # Callers may retain a frame from before a previous deployment/choice.
+        frame = self.input.window_service.screenshot()
+        if frame is None:
+            raise RuntimeError('Game capture unavailable during deployment')
+        handled = self.event_handler.handle(frame)
+        if handled:
+            frame = self.input.window_service.screenshot()
+            if frame is None:
+                raise RuntimeError('Game capture unavailable after event choice')
+            self._sync_frame_size(frame)
+            if selected:
+                roi = self.vision.bottom_half_region(frame)
+                x, y = self.vision.find_template(frame, selected, region=roi)
+                if x is None:
+                    return None, True  # The previously selected troop is exhausted.
+                self.input.click(x, y, pause=0.2, rand=False)
+        return frame, handled
+
 
     def _point(self, key):
         return self.config.get_point(key)
@@ -202,6 +231,7 @@ class AttackStrategy:
 
 
     def deploy_heroes(self, frame):
+        frame, _ = self._reward_checkpoint(frame)
         self._sync_frame_size(frame)
         if self.input.window_service.use_adb:
             self._adb_deploy_heroes()
@@ -226,6 +256,12 @@ class AttackStrategy:
             self.input.click(ix, iy, pause = 0.2, rand = False)
             self.input.click(pause = 0.2, *deploy_point)
         for hero in heroes:
+            fresh, interrupted = self._reward_checkpoint()
+            if fresh is not None:
+                frame = fresh
+                roi = self.vision.bottom_half_region(frame)
+            if interrupted:
+                deployed_heroes = self._relocate_abilities(deployed_heroes, frame)
             (bx, by) = self.vision.find_template(frame, f'''{hero}.png''', threshold = 0.7, region = roi)
             if not bx:
                 continue
@@ -234,13 +270,45 @@ class AttackStrategy:
             self._deployment_point(f'{hero} drop (+/-15px)', *deploy_point)
             self.input.click(bx, by, pause = 0.2, rand = False)
             self.input.click(pause = 0.2, *deploy_point)
-            deployed_heroes.append((bx, by))
-        for hx, hy in deployed_heroes:
+            # Remember the live, deployed appearance only for relocation after
+            # a reward shifts the bar. Normal ability clicks retain main's slots.
+            live = self.input.window_service.screenshot() if self.event_handler else frame
+            radius = max(8, round(frame.shape[0]*.025))
+            tile = None
+            if live is not None and bx >= radius and by >= radius:
+                tile = live[by-radius:by+radius, bx-radius:bx+radius].copy()
+            deployed_heroes.append((bx, by, tile))
+        while deployed_heroes:
+            fresh, interrupted = self._reward_checkpoint()
+            if interrupted:
+                deployed_heroes = self._relocate_abilities(deployed_heroes, fresh)
+            if not deployed_heroes:
+                break
+            hx, hy, _ = deployed_heroes.pop(0)
             self.input.click(hx, hy, pause = 0.2)
+            logger.info('Hero ability clicked at %d,%d', hx, hy)
             if self.stop_event:
                 self.stop_event.wait(random.uniform(0.1, 0.2))
                 continue
             time.sleep(random.uniform(0.1, 0.2))
+
+    def _relocate_abilities(self, heroes, frame):
+        """Match cached live portraits only when an event actually moved slots."""
+        if frame is None:
+            return []
+        top = frame.shape[0]//2
+        roi = cv2.cvtColor(frame[top:], cv2.COLOR_BGR2GRAY)
+        relocated = []
+        for x, y, tile in heroes:
+            if tile is None or not tile.size:
+                continue
+            gray = cv2.cvtColor(tile, cv2.COLOR_BGR2GRAY)
+            _, score, _, loc = cv2.minMaxLoc(cv2.matchTemplate(roi, gray, cv2.TM_CCOEFF_NORMED))
+            if score >= .65:
+                relocated.append((loc[0]+tile.shape[1]//2, top+loc[1]+tile.shape[0]//2, tile))
+            else:
+                logger.info('Hero no longer recognizable after reward; skipping stale slot')
+        return relocated
 
 
     def _hero_corner_xy(self, corner):
@@ -528,6 +596,7 @@ slot nearest the top vertex is left empty (virtual troop at the apex).
     def _deploy_diamond_perimeter_troop(self, frame, template_name, stop_event = None, *, count = _EDRAG_COUNT, delay = _EDRAG_DELAY):
         '''Select troop in the bottom bar and click ``count`` points on the diamond perimeter.'''
         ev = stop_event or self.stop_event
+        frame, _ = self._reward_checkpoint(frame)
         roi = self.vision.bottom_half_region(frame)
         (tx, ty) = self.vision.find_template(frame, template_name, region = roi)
         if tx is None:
@@ -543,6 +612,11 @@ slot nearest the top vertex is left empty (virtual troop at the apex).
             if ev and ev.is_set():
                 range(count)
                 return True
+            fresh, handled = self._reward_checkpoint(selected=template_name)
+            if handled and fresh is None:
+                break
+            if fresh is not None:
+                frame = fresh
             (px, py) = self._random_diamond_perimeter_point(frame)
             self._deployment_point(f'drop {_ + 1}', px, py)
             self.input.click(px, py, pause = delay, rand = False)
@@ -558,6 +632,7 @@ slot nearest the top vertex is left empty (virtual troop at the apex).
 
 
     def deploy_spells(self, frame):
+        frame, _ = self._reward_checkpoint(frame)
         self._sync_frame_size(frame)
         roi = self.vision.bottom_half_region(frame)
         (bx, by) = self.vision.find_template(frame, 'earthquake.png', region = roi)
@@ -581,6 +656,9 @@ slot nearest the top vertex is left empty (virtual troop at the apex).
             else:
                 points = self._earthquake_curve_points_with_jitter(ltr)
             for cx, cy in points:
+                fresh, handled = self._reward_checkpoint(selected='earthquake.png')
+                if handled and fresh is None:
+                    break
                 jx = max(0, min(fw - 1, cx))
                 jy = max(0, min(fh - 1, cy))
                 self.input.click_at(jx, jy, rand = False)
@@ -604,6 +682,7 @@ class TroopSpamStrategy(AttackStrategy):
 
     def execute(self, frame, stop_event = None):
         ev = stop_event or self.stop_event
+        frame, _ = self._reward_checkpoint(frame)
         self._sync_frame_size(frame)
         logger.info(f'''Executing {self.troop_name} strategy''')
         self._adb_border_probe_used = False
@@ -678,6 +757,11 @@ class TroopSpamStrategy(AttackStrategy):
             for i in range(len(ordered_corners) - 1):
                 if ev and ev.is_set():
                     break  # [recovered: decompiler dropped this break]
+                fresh, handled = self._reward_checkpoint(selected=f'{self.troop_name}.png')
+                if handled:
+                    if fresh is None:
+                        break
+                    self.input.mouse_down(curr_x, curr_y)
                 next_c = ordered_corners[i + 1]
                 (target_x, target_y) = self._expand_loc(*self._point(next_c))
                 duration = random.uniform(segment_duration * 0.9, segment_duration * 1.1)
@@ -705,11 +789,11 @@ class TroopSpamStrategy(AttackStrategy):
                     self._sync_frame_size(frame)
                     self.deploy_spells(frame)
             return True
-        except:
+        except Exception:
             if self.input.window_service.use_adb:
                 logger.exception('ADB troop deployment failed: %s', self.troop_name)
-            self.input.mouse_up(curr_x, curr_y)
         finally:
+            self.input.mouse_up(curr_x, curr_y)
             self._deployment_snapshot('after')
 
 

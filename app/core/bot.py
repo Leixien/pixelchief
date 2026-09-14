@@ -1,4 +1,5 @@
 import time
+from app.core.battle_rewards import BattleRewards
 import random
 import threading
 from typing import Callable, List, Optional, Tuple
@@ -64,6 +65,7 @@ class Bot:
         self.stop_event = threading.Event()
         self.input = InputService(self.window, self.stop_event)
         self.vision = VisionService()
+        self._battle_rewards = BattleRewards(self.window, self.input, self.stop_event)
         self.running = False
         self._earthquake_method = EARTHQUAKE_METHOD_CURVE
         self._loot_totals = (0, 0, 0)
@@ -1515,6 +1517,7 @@ deselect, which would eat the upcoming Attack click.'''
             return None
         self._update_config_size(frame)
         strategy = self._get_strategy(method_id)
+        strategy.event_handler = self._battle_rewards
         try:
             result = strategy.execute(frame, self.stop_event)
         except _AdbBoundaryUnavailable as exc:
@@ -1593,6 +1596,8 @@ Returns (``"return"`` | ``"chest"``, x, y) or (None, None, None) on timeout.
                     return (None, None, None)
                 continue
             self._update_config_size(frame)
+            if self._battle_rewards.handle(frame):
+                continue
             (rx, ry) = (None, None)
             returnhome_tpls = ('returnhome.png', 'returnhome2.png') if self.config.aspect_key == ASPECT_16_10 else ('returnhome.png',)
             for tpl in returnhome_tpls:
@@ -1684,6 +1689,8 @@ Returns (``"return"`` | ``"chest"``, x, y) or (None, None, None) on timeout.
                     return None
                 continue
             self._update_config_size(frame)
+            if self._battle_rewards.handle(frame):
+                continue
             if self._dismiss_okay_or_exit_on_frame(frame):
                 if self.stop_event.wait(0.3):
                     return None
@@ -2109,6 +2116,8 @@ OCR is limited to the right half of the window unless ``region`` is passed expli
             if frame is None:
                 continue
             self._update_config_size(frame)
+            if self._battle_rewards.handle(frame):
+                continue
             search_region = region
             if search_region is None and region_from_frame is not None:  # [recovered: both conditions were inverted]
                 search_region = region_from_frame(frame)
@@ -2137,6 +2146,8 @@ OCR is limited to the right half of the window unless ``region`` is passed expli
             if frame is None:
                 continue
             self._update_config_size(frame)
+            if self._battle_rewards.handle(frame):
+                continue
             search_region = self._search_region_for_template(frame, template, region, y_anchor, y_slop)
             (x, y) = self.vision.find_template(frame, template, threshold = threshold, region = search_region)
             last_search = (frame, search_region)
