@@ -1687,11 +1687,7 @@ with ``psm10_glyph_confidence``, labels include the estimated confidence.
                 return chars
             except pytesseract.TesseractNotFoundError:
                 VisionService._log_tesseract_missing()
-
-                try:
-                    return None
-                except ValueError:
-                    []
+                return []
 
 
 
