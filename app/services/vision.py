@@ -448,7 +448,8 @@ try:
             factors = [1.0]
             if scale_template and adb_options()[0]:
                 # ponytail: bounded sweep; cache validated scales if repeated misses become too slow.
-                factors.extend(step / 100 for step in range(80, 141) if step != 100)
+                factors.append(1.03)
+                factors.extend(step / 100 for step in range(80, 141, 5) if step != 100)
             seen = set()
             for factor in factors:
                 tw, th = max(1, round(nw * factor)), max(1, round(nh * factor))

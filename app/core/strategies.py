@@ -66,6 +66,7 @@ class AttackStrategy:
                 if image is None or not cv2.imwrite(str(directory / name), image):
                     raise OSError(f'Cannot save {directory / name}')
             #logger.info('ADB deployment snapshot saved: %s', stage)
+            return frame
         except Exception:
             logger.warning('ADB deployment diagnostic failed', exc_info=True)
 
@@ -133,47 +134,57 @@ class AttackStrategy:
         self._deployment_snapshot('after', frame)
         return frame, points
 
-    def _adb_deploy_selected(self, template_name: str, count: int) -> None:
-        frame, points = self._adb_border_points()
+    def _adb_deploy_selected(self, template_name: str, count: int) -> Any:
+        cached = getattr(self, '_adb_border_cache', None)
+        points = cached[1] if cached is not None else self._adb_border_points()[1]
         #logger.info('ADB deployment %s: planned taps=%d', template_name, count)
-        attempted = 0
-        while attempted < count:
+        # ponytail: reuse one validated border; battle damage changes pixels, not camera geometry.
+        for attempted in range(count):
             if self.stop_event and self.stop_event.is_set():
                 raise InterruptedError('ADB deployment stopped by user')
-            batch = min(3, count - attempted)
             self._adb_deployment_started = True
-            for _ in range(batch):
-                point = points[attempted % len(points)]
-                self._deployment_point(f'{template_name} tap', *point)
-                self.input.click(*point, pause=.15, rand=False)
-                attempted += 1
-            if attempted < count:
-                # Retain the original reference to prevent cumulative camera drift on reuse.
-                frame, points = self._adb_border_points()
+            point = points[attempted % len(points)]
+            self._deployment_point(f'{template_name} tap', *point)
+            self.input.click(*point, pause=.15, rand=False)
         #logger.info('ADB deployment %s: completed %d taps', template_name, attempted)
-        self._deployment_snapshot('after')
+        return self._deployment_snapshot('after')
 
     def _adb_deploy_heroes(self) -> None:
         heroes = ['queen', 'warden', 'RC', 'king', 'prince', 'dragonduke']
         random.shuffle(heroes)
+        names = ['loglauncher', 'siegebarracks'] + heroes
+        cached = getattr(self, '_adb_border_cache', None)
+        points = cached[1] if cached is not None else self._adb_border_points()[1]
+        positions = {}
+        for _ in range(2):
+            if len(positions) == len(names):
+                break
+            if self.stop_event and self.stop_event.is_set():
+                raise InterruptedError('ADB deployment stopped by user')
+            frame = self.input.window_service.screenshot()
+            roi = self.vision.bottom_half_region(frame)
+            for name in names:
+                if name in positions:
+                    continue
+                x, y = self.vision.find_template(
+                    frame, f'{name}.png', threshold=.7, region=roi,
+                )
+                if x is not None:
+                    positions[name] = (x, y)
         siege_selected = False
-        for name in ['loglauncher', 'siegebarracks'] + heroes:
+        for name in names:
             if self.stop_event and self.stop_event.is_set():
                 raise InterruptedError('ADB deployment stopped by user')
             siege = name in ('loglauncher', 'siegebarracks')
             if siege and siege_selected:
                 continue
-            frame = self.input.window_service.screenshot()
-            x, y = self.vision.find_template(
-                frame, f'{name}.png', threshold=.7,
-                region=self.vision.bottom_half_region(frame),
-            )
-            if x is None:
+            point = positions.get(name)
+            if point is None:
                #logger.info('ADB deployment: %s not detected', name)
                 continue
+            x, y = point
             self._deployment_point(f'{name} select', x, y)
             self.input.click(x, y, pause=.2, rand=False)
-            _, points = self._adb_border_points()
             point = random.choice(points)
             self._deployment_point(f'{name} drop', *point)
             self._adb_deployment_started = True
@@ -200,12 +211,12 @@ class AttackStrategy:
         """
         if self.stop_event and self.stop_event.is_set():
             raise InterruptedError('Bot stopped by user')
-        if self.event_handler is None:
-            return frame, False
-        # Callers may retain a frame from before a previous deployment/choice.
-        frame = self.input.window_service.screenshot()
+        if frame is None:
+            frame = self.input.window_service.screenshot()
         if frame is None:
             raise RuntimeError('Game capture unavailable during deployment')
+        if self.event_handler is None:
+            return frame, False
         handled = self.event_handler.handle(frame)
         if handled:
             frame = self.input.window_service.screenshot()
@@ -231,7 +242,7 @@ class AttackStrategy:
 
 
     def deploy_heroes(self, frame):
-        frame, _ = self._reward_checkpoint(frame)
+        frame, _ = self._reward_checkpoint()
         self._sync_frame_size(frame)
         if self.input.window_service.use_adb:
             self._adb_deploy_heroes()
@@ -655,10 +666,11 @@ slot nearest the top vertex is left empty (virtual troop at the apex).
                     points = self._random_points_in_polygon(poly, fw, fh, 11)
             else:
                 points = self._earthquake_curve_points_with_jitter(ltr)
-            for cx, cy in points:
-                fresh, handled = self._reward_checkpoint(selected='earthquake.png')
-                if handled and fresh is None:
-                    break
+            for index, (cx, cy) in enumerate(points):
+                if index and index % 3 == 0:
+                    fresh, handled = self._reward_checkpoint(selected='earthquake.png')
+                    if handled and fresh is None:
+                        break
                 jx = max(0, min(fw - 1, cx))
                 jy = max(0, min(fh - 1, cy))
                 self.input.click_at(jx, jy, rand = False)
@@ -703,8 +715,9 @@ class TroopSpamStrategy(AttackStrategy):
             return True
         if self.input.window_service.use_adb:
             count = 42 if self.troop_name == 'valkyrie' else max(1, round(self.duration * 10))
-            self._adb_deploy_selected(f'{self.troop_name}.png', count)
-            frame = self.input.window_service.screenshot()
+            frame = self._adb_deploy_selected(f'{self.troop_name}.png', count)
+            if frame is None:
+                frame = self.input.window_service.screenshot()
             self._sync_frame_size(frame)
             if self.deploy_golden_drags_if_present(frame, ev):
                 return True

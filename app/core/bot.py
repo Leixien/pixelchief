@@ -75,6 +75,9 @@ class Bot:
         self._suppress_loot_negative_error_once = False
         self._wall_debug_dir = None
         self._wall_debug_seq = 0
+        self._home_trace_dir = None
+        self._home_trace_started = 0.0
+        self._home_trace_seq = 0
 
     
     def start(self, method, run_time_minutes, star_bonus = False, status_callback = None, loot_callback = None, multi_run_players = None, ranked_fill = False, upgrade_walls = False, earthquake_method = EARTHQUAKE_METHOD_CURVE, builder_base = False, loot_prioritise = 'both', wall_upgrade_threshold = 0, auto_upgrade = MODE_OFF, reserve_builders = 1, state_callback = None, upgrade_order = None):
@@ -160,6 +163,7 @@ class Bot:
         self._gold_pinned = False
         self._elixir_pinned = False
         self._walls_upgraded_session = 0
+        self._home_trace_dir = None
         self._emit_state(walls_upgraded = 0)
 
     
@@ -172,7 +176,7 @@ class Bot:
         cb(g, el, de, elapsed)
 
     
-    def _loot_snapshot_before_attack(self):
+    def _loot_snapshot_before_attack(self, frame = None):
         '''
 On home: OCR top‑right HUD, diff vs previous snapshot, accumulate non‑negative deltas,
 refresh the baseline.
@@ -185,12 +189,15 @@ When deltas vs the previous snapshot are not all non-negative, session totals ar
 incremented unless ``_suppress_loot_negative_error_once`` suppresses one skip (set after
 wall upgrades for the first pre-Attack snapshot that would otherwise count as an error).
 '''
-        # Consecutive-frame agreement: single HUD reads get corrupted by animations
-        # (live repro: elixir "115M" — an upward misread passes the ≥0 filter and
-        # poisons the session totals). No stable read this cycle → just skip.
-        triplet = self._read_hud_triplet_stable()
+        # ADB screenshots are expensive: when Attack was found, reuse that confirmed
+        # home frame and let the plausibility caps below reject bad OCR reads.
+        if self.window.use_adb and frame is not None:
+            triplet = VisionService.parse_hud_resources_triplet(
+                VisionService.extract_top_right_hud_numbers(frame))
+        else:
+            triplet = self._read_hud_triplet_stable()
         if triplet is None:
-            logger.debug('Loot tracker: no stable HUD read this cycle')
+            logger.debug('Loot tracker: no usable HUD read this cycle')
             self._emit_loot_update()
             return None
         self._last_hud_triplet = triplet
@@ -389,6 +396,60 @@ past the bottom is a harmless no-op, so this can be called repeatedly.
             cv2.imwrite(str(path), image, [cv2.IMWRITE_JPEG_QUALITY, 90])
         except Exception:
             logger.debug('Wall upgrade: diagnostic frame failed', exc_info = True)
+
+
+    def _start_home_trace(self, label, frame = None):
+        if self._home_trace_dir is not None:
+            self._home_trace(label, frame)
+            return
+        try:
+            stamp = time.strftime('%Y%m%d_%H%M%S')
+            suffix = time.time_ns() % 1000000
+            self._home_trace_dir = (
+                get_user_app_data_dir() / 'debug' / 'home_transition' /
+                f'{stamp}_{suffix:06d}')
+            self._home_trace_dir.mkdir(parents = True, exist_ok = True)
+            self._home_trace_started = time.monotonic()
+            self._home_trace_seq = 0
+            logger.info('Home transition trace: saving diagnostics to %s',
+                        self._home_trace_dir)
+            self._home_trace(label, frame)
+        except Exception:
+            self._home_trace_dir = None
+            logger.debug('Home transition trace: could not start', exc_info = True)
+
+
+    def _home_trace(self, label, frame = None, point = None):
+        if self._home_trace_dir is None:
+            return
+        try:
+            elapsed = time.monotonic() - self._home_trace_started
+            safe = ''.join(c if c.isalnum() or c in '-_' else '_' for c in label)
+            with (self._home_trace_dir / 'timeline.txt').open('a', encoding = 'utf-8') as timeline:
+                timeline.write(f'{elapsed:08.3f}s {safe}\n')
+            if frame is None:
+                return
+            image = frame.copy()
+            if point is not None:
+                x, y = (int(point[0]), int(point[1]))
+                radius = max(10, round(min(image.shape[:2]) * .02))
+                cv2.circle(image, (x, y), radius, (0, 0, 255), 3)
+            self._home_trace_seq += 1
+            path = self._home_trace_dir / (
+                f'{self._home_trace_seq:03d}_{elapsed:08.3f}s_{safe}.jpg')
+            cv2.imwrite(str(path), image, [cv2.IMWRITE_JPEG_QUALITY, 90])
+        except Exception:
+            logger.debug('Home transition trace: diagnostic write failed', exc_info = True)
+
+
+    def _finish_home_trace(self, label):
+        if self._home_trace_dir is None:
+            return
+        directory = self._home_trace_dir
+        elapsed = time.monotonic() - self._home_trace_started
+        self._home_trace(label)
+        logger.info('Home transition trace: completed in %.1fs at %s', elapsed, directory)
+        self._home_trace_dir = None
 
 
     def _wall_debug_click(self, label, x, y, *, pause = 0.3):
@@ -1037,32 +1098,34 @@ deselect, which would eat the upcoming Attack click.'''
             frame = self.window.screenshot()
             if frame is None:
                 if self.stop_event.wait(0.5):
-                    return (None, None)
+                    return (None, None, None)
                 continue
             self._update_config_size(frame)
+            self._home_trace('attack_wait', frame)
             if self._dismiss_okay_or_exit_on_frame(frame):
                 if self.stop_event.wait(0.25):
-                    return (None, None)
+                    return (None, None, None)
                 continue
             (sx, sy) = self.vision.find_template(frame, 'surrender.png')
             if sx:
                 # We are inside a live battle — nudge clicks would deploy troops. Bail out and
                 # let _home_screen_recovery surrender/return-home.
                 logger.warning('Attack wait: live battle detected (surrender visible) — leaving it to recovery')
-                return (None, None)
+                return (None, None, None)
             search_region = self._search_region_for_template(frame, 'attack.png', None, None, 200)
             (ax, ay) = self.vision.find_template(frame, 'attack.png', region = search_region)
             last_search = (frame, search_region)
             if ax:
-                return (ax, ay)
+                self._home_trace('attack_found', frame, (ax, ay))
+                return (ax, ay, frame)
             self._nudge_view_to_reveal_attack()
             if self.stop_event.wait(0.35):
-                return (None, None)
+                return (None, None, None)
         if error:
             logger.warning('Timeout waiting for attack.png')  # [recovered: decompiler misnested this inside the loop — it spammed once per poll]
         if last_search is not None:
             self.vision.save_attack_diagnostic(*last_search)
-        return (None, None)
+        return (None, None, None)
 
     
     def _run_loop(self, method_id, duration_seconds, star_bonus = False, ranked_fill = False, upgrade_walls = False):
@@ -1444,15 +1507,19 @@ deselect, which would eat the upcoming Attack click.'''
             # use it directly instead of hunting for the home Attack button it covers.
             logger.info('Attack: battle-selection screen already open — continuing from Find a Match')
         else:
-            (ax, ay) = self._wait_for_attack_with_nudge()
+            (ax, ay, home_frame) = self._wait_for_attack_with_nudge()
             if not ax:
                 return None
             # Home screen confirmed (Attack visible) → the HUD is readable: record the
             # pre-attack loot baseline / accumulate the previous battle's gains.
             # [recovered: this call existed only in the wall path — with walls off the
             # loot tracker never ran (live repro: 3 battles, session totals stuck at 0)]
-            self._loot_snapshot_before_attack()
+            self._home_trace('loot_ocr_start')
+            self._loot_snapshot_before_attack(home_frame)
+            self._home_trace('loot_ocr_end')
+            self._home_trace('attack_click', home_frame, (ax, ay))
             self.input.click(ax, ay, pause = 0.1)
+            self._finish_home_trace('attack_clicked')
             (fx, fy) = self._wait_for_image(battle_template)
         if not fx:
             if ranked_fill:
@@ -1512,10 +1579,10 @@ deselect, which would eat the upcoming Attack click.'''
             return None
         if not self.window.use_adb:
             self.input.scroll(cx, cy, 3)
-        frame = self.window.screenshot()
-        if frame is None:
-            return None
-        self._update_config_size(frame)
+            frame = self.window.screenshot()
+            if frame is None:
+                return None
+            self._update_config_size(frame)
         strategy = self._get_strategy(method_id)
         strategy.event_handler = self._battle_rewards
         try:
@@ -1548,44 +1615,55 @@ deselect, which would eat the upcoming Attack click.'''
             (sx, sy) = self._wait_for_image('surrender.png', timeout = 2, error = False)
             if sx:
                 self.input.click(sx, sy, pause = 0.1)
+                self._start_home_trace('surrender_clicked')
                 return None
             (bx, by) = self._wait_for_image('endbattle.png', timeout = 2, error = False)
             if bx:
                 self.input.click(bx, by, pause = 0.1)
+                self._start_home_trace('end_battle_clicked')
                 return None
+            self._start_home_trace('battle_exit_not_found')
             return None
         (bx, by) = self._wait_for_image('endbattle.png', timeout = 60, error = False)
         if bx:
             self.input.click(bx, by, pause = 0.1)
+            self._start_home_trace('end_battle_clicked')
             return None
         (sx, sy) = self._wait_for_image('surrender.png', timeout = 2, error = False)
         if sx:
             self.input.click(sx, sy, pause = 0.1)
+            self._start_home_trace('surrender_clicked')
             return None
+        self._start_home_trace('battle_exit_not_found')
 
     
     def _return_home(self):
-        '''Dismiss Okay if present, then wait for ``returnhome.png`` (+ ``returnhome2.png`` on 16:10) or ``chestclaim.png`` (mutually exclusive).'''
-        (ox, oy) = self._wait_for_image('okay.png', timeout = 10)
-        if ox:
-            self.input.click(ox, oy, pause = 0.1)
-        (kind, hx, hy) = self._wait_for_return_home_or_chest_claim(timeout = 10)
-        if kind == 'return' and hx:
+        '''Dismiss Okay when present, then handle Return Home or a chest claim.'''
+        (kind, hx, hy) = self._wait_for_return_home_or_chest_claim(
+            timeout = 10, include_okay = True)
+        okay_clicked = kind == 'okay'
+        if okay_clicked:
+            self._home_trace('okay_click')
             self.input.click(hx, hy, pause = 0.1)
-            return ox is not None
+            (kind, hx, hy) = self._wait_for_return_home_or_chest_claim(timeout = 10)
+        if kind == 'return' and hx:
+            self._home_trace('return_home_click')
+            self.input.click(hx, hy, pause = 0.1)
+            return okay_clicked
         if kind == 'chest' and hx:
+            self._home_trace('chest_claim_click')
             logger.info('Post-battle UI: chestclaim.png (replacing return home); running chest flow')
             self.input.click(hx, hy, pause = 0.2)
             if self.stop_event.wait(0.35):
-                return ox is not None
+                return okay_clicked
             self._tap_empty_until_chest_continue()
-        return ox is not None
+        return okay_clicked
 
     
-    def _wait_for_return_home_or_chest_claim(self, timeout = 10):
+    def _wait_for_return_home_or_chest_claim(self, timeout = 10, include_okay = False):
         '''
-Poll one frame for ``returnhome.png`` (+ ``returnhome2.png`` on 16:10 only) then ``chestclaim.png`` (only one should match).
-Returns (``"return"`` | ``"chest"``, x, y) or (None, None, None) on timeout.
+Poll one frame for optional ``okay.png``, ``returnhome.png`` (+ ``returnhome2.png``
+on 16:10 only), then ``chestclaim.png``. Returns the matched kind and coordinates.
 '''
         start = time.time()
         while time.time() - start < timeout:
@@ -1596,8 +1674,13 @@ Returns (``"return"`` | ``"chest"``, x, y) or (None, None, None) on timeout.
                     return (None, None, None)
                 continue
             self._update_config_size(frame)
+            self._home_trace('return_wait', frame)
             if self._battle_rewards.handle(frame):
                 continue
+            if include_okay:
+                (ox, oy) = self.vision.find_template(frame, 'okay.png')
+                if ox:
+                    return ('okay', ox, oy)
             (rx, ry) = (None, None)
             returnhome_tpls = ('returnhome.png', 'returnhome2.png') if self.config.aspect_key == ASPECT_16_10 else ('returnhome.png',)
             for tpl in returnhome_tpls:
@@ -1613,7 +1696,8 @@ Returns (``"return"`` | ``"chest"``, x, y) or (None, None, None) on timeout.
                 return (None, None, None)
             if time.time() - start < timeout:
                 continue
-        logger.warning('Timeout waiting for returnhome.png / returnhome2.png (16:10) or chestclaim.png')
+        expected = 'okay.png / ' if include_okay else ''
+        logger.warning('Timeout waiting for %sreturnhome.png / returnhome2.png (16:10) or chestclaim.png', expected)
         return (None, None, None)
 
     
@@ -1689,6 +1773,7 @@ Returns (``"return"`` | ``"chest"``, x, y) or (None, None, None) on timeout.
                     return None
                 continue
             self._update_config_size(frame)
+            self._home_trace('recovery', frame)
             if self._battle_rewards.handle(frame):
                 continue
             if self._dismiss_okay_or_exit_on_frame(frame):
@@ -1697,14 +1782,17 @@ Returns (``"return"`` | ``"chest"``, x, y) or (None, None, None) on timeout.
                 continue
             (sx, sy) = self.vision.find_template(frame, 'surrender.png')
             if sx:
+                self._start_home_trace('recovery_surrender', frame)
                 logger.info('Recovery: live battle — surrendering to get home')
                 self.input.click(sx, sy, pause = 0.3)
+                self._home_trace('surrender_clicked')
                 if self.stop_event.wait(0.5):
                     return None
                 continue
             (rx, ry) = self.vision.find_template(frame, 'returnhome.png')
             if rx:
                 logger.info('Recovery: clicking Return Home')
+                self._home_trace('recovery_return_home_click', frame, (rx, ry))
                 self.input.click(rx, ry, pause = 0.3)
                 if self.stop_event.wait(0.5):
                     return None
@@ -1726,6 +1814,11 @@ Returns (``"return"`` | ``"chest"``, x, y) or (None, None, None) on timeout.
                     if self.stop_event.wait(2):
                         return None
                     continue
+            bottom_roi = VisionService.bottom_half_region(frame)
+            (ax, ay) = self.vision.find_template(frame, 'attack.png', region = bottom_roi)
+            if ax:
+                self._reload_first_seen = None
+                return None
             top_roi = VisionService.top_half_region(frame)
             (hx, hy) = self._find_home_village_builder(frame, top_roi)
             if hx:

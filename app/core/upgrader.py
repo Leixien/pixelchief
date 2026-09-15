@@ -61,6 +61,8 @@ _STALE_STEPS_AT_LIST_END = 2  # consecutive scrolls adding no new rows = bottom 
 # discarded all of them and the top 'Suggested' rows were never seen). Enough up-clicks
 # to return from the very bottom of the longest list.
 _RESET_TO_TOP_WHEEL_CLICKS = _MAX_SCROLL_STEPS * _WHEEL_CLICKS + 4
+_FAST_WHEEL_PAUSE_RANGE = (0.01, 0.03)
+_SCROLL_SETTLE_SECONDS = 0.3
 
 _EXEC_ROW_STABLE_TOL = 30  # ref px: max y drift between consecutive frames before a row click is trusted
 _EXEC_LABEL_FUZZY_MIN = 0.85  # exec-pass row label vs the scan-pass pick (compacted, difflib)
@@ -168,17 +170,24 @@ class UpgradeAdvisor:
 
     def _scroll_popup(self, amount, *, upward = False):
         if not self.window.use_adb:
-            self.input.scroll(*self._scroll_point(), amount, upward = upward)
+            self.input.scroll(*self._scroll_point(), amount, upward = upward,
+                              pause_range = _FAST_WHEEL_PAUSE_RANGE)
             return
         width, height = self.window.get_outer_pixel_size()
         x = min(width - 1, max(0, self._scroll_point()[0]))
+        if upward:
+            for _ in range(8):
+                if self.stop_event.is_set():
+                    return
+                self.window.adb.swipe(
+                    x, int(height * 0.16), x, int(height * 0.61), duration_ms = 180)
+            return
         upper = int(height * 0.29)
         lower = int(height * 0.58)
-        start_y, end_y = (upper, lower) if upward else (lower, upper)
         for _ in range(max(1, (amount + 1) // 2)):
             if self.stop_event.is_set():
                 return
-            self.window.adb.swipe(x, start_y, x, end_y, duration_ms = 350)
+            self.window.adb.swipe(x, lower, x, upper, duration_ms = 350)
 
     def _close_popup(self):
         try:
@@ -243,10 +252,13 @@ class UpgradeAdvisor:
         # Stable (consecutive-frame agreement) HUD read: a corrupted single read here
         # feeds can_pay garbage (live repro: gold "66M" → policy skipped real rows).
         hud = read_hud_triplet_stable(self._frame, self.stop_event.wait)
-        chip = parse_builder_chip(frame)
+        chip_frame = self._frame()
+        if chip_frame is None:
+            chip_frame = frame
+        chip = parse_builder_chip(chip_frame)
         if chip is None:
             # Builder count gates live execution — dump the frame so misses are diagnosable.
-            _dump_debug_frame(frame, 'chipfail')
+            _dump_debug_frame(chip_frame, 'chipfail')
         if not self._open_builder_popup():
             return None
         rows = []
@@ -267,7 +279,7 @@ class UpgradeAdvisor:
             if stale >= _STALE_STEPS_AT_LIST_END:
                 break
             self._scroll_popup(_WHEEL_CLICKS)
-            if self.stop_event.wait(1.0):
+            if self.stop_event.wait(_SCROLL_SETTLE_SECONDS):
                 break
         self._close_popup()
         return ScanResult(rows = rows, chip = chip, hud = hud)
@@ -458,7 +470,7 @@ class UpgradeAdvisor:
             if scrolls >= _MAX_SCROLL_STEPS:
                 break
             self._scroll_popup(_WHEEL_CLICKS)
-            if self.stop_event.wait(1.0):
+            if self.stop_event.wait(_SCROLL_SETTLE_SECONDS):
                 return False
         if not row_pt:
             # The two-scan re-find is the phantom-row filter: OCR junk (village pixels

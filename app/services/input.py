@@ -186,7 +186,7 @@ Clamp client-style coordinates into the current captured window rectangle
         self.move(x2, y2, MK_LBUTTON)
 
     
-    def scroll(self, x, y, amount, *, upward = False):
+    def scroll(self, x, y, amount, *, upward = False, pause_range = (0.05, 0.2)):
         if self.window_service.use_adb:
             x1, y1 = self._clamp_to_capture(x, y)
             _, height = self.window_service.get_outer_pixel_size()
@@ -204,4 +204,4 @@ Clamp client-style coordinates into the current captured window rectangle
         lparam = self._make_wheel_lparam(sx, sy)
         for _ in range(amount):
             self.user32.SendMessageW(hwnd, WM_MOUSEWHEEL, wparam, lparam)
-            time.sleep(random.uniform(0.05, 0.2))
+            time.sleep(random.uniform(*pause_range))
