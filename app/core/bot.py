@@ -45,6 +45,10 @@ _WALL_MENU_SCROLL_STEPS = 8  # OCR positions polled: as-opened + 7 wheel nudges 
 _WALL_MENU_WHEEL_CLICKS = 2  # ~3-4 rows per nudge; the OCR band spans the whole popup so a nudge cannot jump the Wall row past it
 _WALL_ROW_STABLE_TOL = 30  # ref px: max y drift between consecutive frames before the row is trusted for a click
 _WALL_COST_REDNESS_THRESHOLD = 0.03
+# The only thing between a red cost and a gem spend. templates/16_10/ does not ship it
+# upstream, and get_template_path() has no cross-aspect fallback, so on 16:10 the guard
+# silently evaluated to "template absent -> skip the check" before this was made fatal.
+_GEM_DIALOG_TEMPLATE = 'needgold_x.png'
 _AUTO_UPGRADE_SCAN_INTERVAL_SECONDS = 600  # full popup scan is OCR-heavy (~15-25s); keep it rare vs the ~35s attack cycle
 _IDLE_RECHECK_SECONDS = 300  # while idling (storages full, nothing startable): wake, recover the screen, re-read state
 # Loot-tracker plausibility caps per snapshot interval (one battle): a raid tops out
@@ -552,7 +556,21 @@ deselect, which would eat the upcoming Attack click.'''
 
     def _maybe_upgrade_walls(self, upgrade_walls):
         '''Upgrade walls on home when enabled and loot is high enough (threshold or full storages).'''
-        if not upgrade_walls or not self._should_upgrade_walls():  # [recovered: decompiler dropped the second `not`, so it upgraded only when storages were NOT full]
+        if not upgrade_walls:
+            return None
+        # Bail before the ~30s open-menu/scroll/add cycle that _confirm_wall_upgrade
+        # would then refuse anyway.
+        guard = get_template_path(_GEM_DIALOG_TEMPLATE)
+        if not guard.exists():
+            if not getattr(self, '_gem_guard_warned', False):
+                self._gem_guard_warned = True
+                logger.error('Wall upgrades disabled: gem-dialog guard %s is missing for the active aspect. '
+                             'Without it nothing can close the buy-with-gems dialog after a confirm.', guard)
+                cb = getattr(self, '_status_callback', None)
+                if cb:
+                    cb('Wall upgrades disabled — gem-dialog guard template missing for this aspect')
+            return None
+        if not self._should_upgrade_walls():  # [recovered: decompiler dropped the second `not`, so it upgraded only when storages were NOT full]
             return None
         cb = getattr(self, '_status_callback', None)
         if cb:
@@ -806,21 +824,30 @@ deselect, which would eat the upcoming Attack click.'''
         return self._confirm_wall_upgrade(frame)
 
     def _confirm_wall_upgrade(self, frame):
-        '''Confirm only a wall-upgrade dialog, never a missing-resource/gem dialog.'''
+        '''Confirm only a wall-upgrade dialog, never a missing-resource/gem dialog.
+
+        Refuses to confirm at all when the gem-dialog template is missing for the
+        active aspect: the post-click check below is the last line of defence, and
+        without it an unaffordable confirm lands on the buy-with-gems dialog with
+        nothing left to close it.'''
         self._wall_debug_save('confirmation_check', frame)
-        if get_template_path('needgold_x.png').exists():
-            (nx, ny) = self.vision.find_template(frame, 'needgold_x.png')
-            if nx:
-                logger.warning('Wall upgrade: missing-resource/gem dialog detected — closing without confirmation')
-                self._wall_debug_click('close_gem_dialog', nx, ny, pause = 0.2)
-                return False
+        guard = get_template_path(_GEM_DIALOG_TEMPLATE)
+        if not guard.exists():
+            logger.error('Wall upgrade: gem-dialog guard %s missing for the active aspect — refusing to confirm. '
+                         'Capture it at this aspect to re-enable wall upgrades.', guard)
+            return False
+        (nx, ny) = self.vision.find_template(frame, _GEM_DIALOG_TEMPLATE)
+        if nx:
+            logger.warning('Wall upgrade: missing-resource/gem dialog detected — closing without confirmation')
+            self._wall_debug_click('close_gem_dialog', nx, ny, pause = 0.2)
+            return False
         (ox, oy) = self.vision.find_template(frame, 'okay.png')
         if not ox:
             self._wall_debug_save('confirmation_okay_missing', frame)
             return False
         after = self._wall_debug_click('confirm_upgrade', ox, oy)
-        if after is not None and get_template_path('needgold_x.png').exists():
-            (nx, ny) = self.vision.find_template(after, 'needgold_x.png')
+        if after is not None:
+            (nx, ny) = self.vision.find_template(after, _GEM_DIALOG_TEMPLATE)
             if nx:
                 logger.warning('Wall upgrade: missing-resource/gem dialog appeared after confirmation — closing')
                 self._wall_debug_click('close_gem_dialog_after_confirm', nx, ny,

@@ -34,6 +34,34 @@ def _glyph_confidence(tokens, expected_char):
         vision.pytesseract = real
 
 
+class WallUpgradeSafetyTests(unittest.TestCase):
+
+    def test_confirm_refuses_without_the_gem_dialog_guard(self):
+        '''No gem-dialog template for the active aspect -> confirm nothing at all.
+
+        templates/16_10/needgold_x.png does not ship, and get_template_path() has no
+        cross-aspect fallback, so on 16:10 the guard used to evaluate to "absent ->
+        skip the check" and the Okay click went in unprotected.
+        '''
+        import pathlib  # imported here: app.core.bot needs win32 and only loads on Windows
+        from app.core import bot as bot_module
+
+        touched = []
+        fake_bot = types.SimpleNamespace(
+            _wall_debug_save = lambda *a, **k: None,
+            _wall_debug_click = lambda *a, **k: touched.append(('click',) + a),
+            vision = types.SimpleNamespace(
+                find_template = lambda *a, **k: (touched.append(('match',) + a), (None, None))[1]))
+
+        real = bot_module.get_template_path
+        bot_module.get_template_path = lambda name: pathlib.Path('no-such-dir') / name
+        try:
+            assert bot_module.Bot._confirm_wall_upgrade(fake_bot, None) is False
+        finally:
+            bot_module.get_template_path = real
+        assert not touched, f'nothing may be matched or clicked without the guard, got {touched}'
+
+
 class VisionRecoveredTests(unittest.TestCase):
 
     def test_glyph_confidence(self):
