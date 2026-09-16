@@ -88,31 +88,39 @@ class Bot:
         self._loot_callback = loot_callback
         self._state_callback = state_callback
         self._earthquake_method = earthquake_method
-        if self.window.use_adb:
-            self.stop_event.clear()
-        if not self.window.find_window():
-            raise RuntimeError('Clash of Clans window not found. Please ensure the game is open.')
-        if self.window.use_adb:
-            self.window.adb.require_motion_support()
-            self.config.set_target_size(*self.window.get_outer_pixel_size())
-            self._check_stop()
-        self._reset_loot_session()
-        self._emit_loot_update()
-        self.running = True
-        if not self.window.use_adb:
-            self.stop_event.clear()
-        unlimited = not star_bonus and multi_run_players is None and not builder_base and int(run_time_minutes or 0) <= 0
-        duration = 900 if star_bonus else (0 if unlimited else max(1, int(run_time_minutes)) * 60)
-        mr = multi_run_players is not None
-        self._builder_base = builder_base
-        self._loot_prioritise = loot_prioritise
-        self._wall_upgrade_threshold = max(0, int(wall_upgrade_threshold or 0))
-        self._auto_upgrade_mode = auto_upgrade if auto_upgrade in AUTO_UPGRADE_MODES else MODE_OFF
-        self._auto_upgrade_last_scan = 0
-        self._reserve_builders = max(0, int(reserve_builders or 0))
-        self._upgrade_order = upgrade_order
-        self._advisor = None  # one UpgradeAdvisor per session (it holds execution cooldowns)
-        logger.info(f'''Bot started. Method: {method}, Time: {'unlimited' if unlimited else f'{run_time_minutes}m'}, StarBonus: {star_bonus}, MultiRun: {mr}, RankedFill: {ranked_fill}, UpgradeWalls: {upgrade_walls}, WallThreshold: {self._wall_upgrade_threshold}, AutoUpgrade: {self._auto_upgrade_mode}, ReserveBuilders: {self._reserve_builders}, Earthquake: {earthquake_method}, BuilderBase: {builder_base}, LootPrioritise: {loot_prioritise}''')
+        adb = None
+        try:
+            if self.window.use_adb:
+                self.stop_event.clear()
+                adb = self.window.adb
+                adb.prepare_display()
+            if not self.window.find_window():
+                raise RuntimeError('Clash of Clans window not found. Please ensure the game is open.')
+            if self.window.use_adb:
+                self.window.adb.require_motion_support()
+                self.config.set_target_size(*self.window.get_outer_pixel_size())
+                self._check_stop()
+            self._reset_loot_session()
+            self._emit_loot_update()
+            self.running = True
+            if not self.window.use_adb:
+                self.stop_event.clear()
+            unlimited = not star_bonus and multi_run_players is None and not builder_base and int(run_time_minutes or 0) <= 0
+            duration = 900 if star_bonus else (0 if unlimited else max(1, int(run_time_minutes)) * 60)
+            mr = multi_run_players is not None
+            self._builder_base = builder_base
+            self._loot_prioritise = loot_prioritise
+            self._wall_upgrade_threshold = max(0, int(wall_upgrade_threshold or 0))
+            self._auto_upgrade_mode = auto_upgrade if auto_upgrade in AUTO_UPGRADE_MODES else MODE_OFF
+            self._auto_upgrade_last_scan = 0
+            self._reserve_builders = max(0, int(reserve_builders or 0))
+            self._upgrade_order = upgrade_order
+            self._advisor = None  # one UpgradeAdvisor per session (it holds execution cooldowns)
+            logger.info(f'''Bot started. Method: {method}, Time: {'unlimited' if unlimited else f'{run_time_minutes}m'}, StarBonus: {star_bonus}, MultiRun: {mr}, RankedFill: {ranked_fill}, UpgradeWalls: {upgrade_walls}, WallThreshold: {self._wall_upgrade_threshold}, AutoUpgrade: {self._auto_upgrade_mode}, ReserveBuilders: {self._reserve_builders}, Earthquake: {earthquake_method}, BuilderBase: {builder_base}, LootPrioritise: {loot_prioritise}''')
+        except Exception:
+            if adb is not None:
+                adb.restore_display()
+            raise
 
         try:
 

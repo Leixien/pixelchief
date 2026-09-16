@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 import math
+import re
 import shutil
 import subprocess
 import sys
 import threading
+import time
 
 import cv2
 import numpy as np
@@ -58,6 +61,60 @@ class AdbService:
             raise RuntimeError(f'ADB device {serial!r}: {state or "not connected"}.')
         self.serial = serial
         self._motion_supported = False
+        self._original_size: str | None = None
+        self._display_lock = threading.RLock()
+
+    def restore_display(self) -> None:
+        '''Restore only a display override owned by this session.'''
+        with self._display_lock:
+            if self._original_size is None:
+                return
+            result = self._run('-s', self.serial, 'shell', 'wm', 'size', self._original_size)
+            if result.strip():
+                raise RuntimeError(f'Android display restore failed: {result.decode(errors="replace")}')
+            self._original_size = None
+            atexit.unregister(self.restore_display)
+
+    def prepare_display(self) -> None:
+        '''Temporarily use 16:9 when the landscape capture is unsupported.'''
+        from app.config import resolve_aspect_key
+
+        with self._display_lock:
+            height, width = self.screenshot().shape[:2]
+            if resolve_aspect_key(width, height) is not None:
+                return
+            if width <= height:
+                raise RuntimeError('Open the game in landscape before starting the bot.')
+            sizes = self._run('-s', self.serial, 'shell', 'wm', 'size').decode()
+            physical = re.search(r'Physical size:\s*(\d+)x(\d+)', sizes)
+            override = re.search(r'Override size:\s*(\d+)x(\d+)', sizes)
+            if physical is None or min(map(int, physical.groups())) <= 0:
+                raise RuntimeError('Cannot determine the original Android display size.')
+            unit = min(width // 16, height // 9)
+            if unit < 1:
+                raise RuntimeError('Android capture is too small for 16:9.')
+            target_width, target_height = 16 * unit, 9 * unit
+            if int(physical[1]) < int(physical[2]):
+                target_width, target_height = target_height, target_width
+            if self._original_size is None:
+                self._original_size = f'{override[1]}x{override[2]}' if override else 'reset'
+                atexit.register(self.restore_display)
+            try:
+                result = self._run(
+                    '-s', self.serial, 'shell', 'wm', 'size', f'{target_width}x{target_height}',
+                )
+                if result.strip():
+                    raise RuntimeError(f'Android display resize failed: {result.decode(errors="replace")}')
+                deadline = time.monotonic() + self._timeout
+                while time.monotonic() < deadline:
+                    height, width = self.screenshot().shape[:2]
+                    if resolve_aspect_key(width, height) is not None:
+                        return
+                    time.sleep(0.2)
+                raise RuntimeError('Android display did not switch to landscape 16:9 in time.')
+            except Exception:
+                self.restore_display()
+                raise
 
     def _run(self, *args: str) -> bytes:
         try:
@@ -165,6 +222,51 @@ def _self_check() -> None:
         run.return_value = reply(b'List of devices attached\nphone\tdevice\n')
         service = AdbService()
         assert service.serial == 'phone'
+        with patch('app.utils.logger.setup_logger'):
+            from app.config import resolve_aspect_key
+        wide = np.zeros((108, 240, 3), dtype=np.uint8)
+        supported = np.zeros((108, 192, 3), dtype=np.uint8)
+        assert resolve_aspect_key(192, 108) is not None
+        for previous in (None, '108x220'):
+            sizes = b'Physical size: 108x240\n'
+            if previous:
+                sizes += f'Override size: {previous}\n'.encode()
+            with patch.object(service, 'screenshot', side_effect=[wide, supported]), patch.object(
+                service, '_run', side_effect=[sizes, b'', b''],
+            ) as command:
+                service.prepare_display()
+                assert command.call_args.args == (
+                    '-s', 'phone', 'shell', 'wm', 'size', '108x192',
+                )
+                service.restore_display()
+                assert command.call_args.args[-1] == (previous or 'reset')
+                service.restore_display()
+                assert command.call_count == 3
+        with patch.object(service, 'screenshot', return_value=supported), patch.object(
+            service, '_run',
+        ) as command:
+            service.prepare_display()
+            command.assert_not_called()
+        with patch.object(service, 'screenshot', return_value=wide), patch.object(
+            service, '_run', side_effect=[b'Physical size: 108x240\n', RuntimeError('resize failed'), b''],
+        ) as command:
+            expect_error(RuntimeError, service.prepare_display)
+            assert command.call_args.args[-1] == 'reset'
+            assert service._original_size is None
+        with patch.object(service, 'screenshot', return_value=wide), patch.object(
+            service, '_run', side_effect=[b'Physical size: 240x108\n', b'', b''],
+        ) as command, patch.object(time, 'monotonic', side_effect=[0.0, service._timeout]):
+            expect_error(RuntimeError, service.prepare_display)
+            assert command.call_args_list[1].args[-1] == '192x108'
+            assert command.call_args.args[-1] == 'reset'
+        with patch.object(service, 'screenshot', side_effect=[wide, supported]), patch.object(
+            service, '_run', side_effect=[b'Physical size: 108x240\n', b'', RuntimeError('offline'), b''],
+        ):
+            service.prepare_display()
+            expect_error(RuntimeError, service.restore_display)
+            assert service._original_size == 'reset'
+            service.restore_display()
+            assert service._original_size is None
         frame = np.full((2, 3, 3), (10, 20, 30), dtype=np.uint8)
         encoded, png = cv2.imencode('.png', frame)
         assert encoded
