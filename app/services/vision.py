@@ -1293,13 +1293,17 @@ the aspect baseline by **width** (``1000`` @ 2560 for both 16:10 and 16:9).
                 if aq and ar and ar in aq and len(ar) >= max(4, int(0.55 * len(aq))):
                     return True
             if not fuzzy_min_ratio is None:
+                # `r` and `query_norm` already share a casing convention (both lowered
+                # unless case_sensitive), so compare them as-is; only the alnum mode
+                # strips, and it strips BOTH sides.
+                # [recovered: decompiler dropped these branches -> cr was always
+                # lowercased against a case-sensitive query, and alnum stripped only cq]
                 if match_alnum_only:
-                    pass
-                elif case_sensitive:
-                    pass
-
-                cr = r.lower()
-                cq = re.sub('[^a-z0-9]', '', query_norm.lower()) if match_alnum_only else query_norm
+                    cr = re.sub('[^a-z0-9]', '', r.lower())
+                    cq = re.sub('[^a-z0-9]', '', query_norm.lower())
+                else:
+                    cr = r
+                    cq = query_norm
                 if len(cq) < 3:
                     return False
                 (lo, hi) = sorted((len(cr), len(cq)))
@@ -1534,34 +1538,31 @@ very narrow glyphs (common for ``image_to_boxes``), which would falsely read as 
                     fc = float(c)
                     if math.isnan(best_any) or fc > best_any:
                         best_any = fc
+                    # Prefer a token that actually reads as the expected glyph over a
+                    # merely confident one; `exp` can be multi-char (image_to_boxes emits
+                    # the odd ligature), hence the last-char tier.
+                    # [recovered: decompiler dropped the `pri` stores, leaving the orphan
+                    # `2` below the loop, and flipped the same-tier comparison]
                     if raw == exp:
-                        pass
+                        pri = 2
                     elif exp and raw == exp[-1:]:
-                        pass
-
-                    pri = 0
-                    if not pri > best_pri:
-                        if not pri == best_pri:
-                            continue
-                        if not math.isnan(best_c) and fc > float(best_c):
-                            continue
+                        pri = 1
+                    else:
+                        pri = 0
+                    if pri < best_pri:
+                        continue
+                    if pri == best_pri and not math.isnan(best_c) and fc <= float(best_c):
+                        continue
                     best_pri = pri
                     best_c = fc
-                2
                 if not math.isnan(best_c):
                     return best_c
                 return best_any
             except (pytesseract.TesseractNotFoundError, OSError):
-
-                try:
-
-                    try:
-                        return None
-                    except (TypeError, ValueError, KeyError):
-                        math.nan
-
-                except (TypeError, ValueError):
-                    math.nan
+                # [recovered: decompiler left `return None` under dead nested handlers;
+                # every other failure path here returns NaN, and callers feed this
+                # straight into math.isnan / float]
+                return math.nan
 
 
 
@@ -1678,8 +1679,12 @@ with ``psm10_glyph_confidence``, labels include the estimated confidence.
                 if psm10_glyph_confidence and parsed_chars:
                     glyph_confs_for_vis = []
                     rebuilt = []
-                    for ch, l, t, r, b in zip(parsed_chars, chars):
-                        ob = None
+                    # `parsed_chars` (mono coords, for the psm10 re-OCR) and `chars`
+                    # (screen coords, kept in the result) are appended in lockstep, so
+                    # zip pairs each box with its own glyph.
+                    # [recovered: decompiler flattened the nested target into
+                    # `for ch, l, t, r, b in zip(...)` and lost `ob`]
+                    for (ch, l, t, r, b), ob in zip(parsed_chars, chars):
                         gc = VisionService._tesseract_single_glyph_confidence_psm10(mono, l, t, r, b, expected_char = ch)
                         glyph_confs_for_vis.append(gc)
                         rebuilt.append(OcrWordBox(ob.left, ob.top, ob.width, ob.height, ob.text, gc))
