@@ -43,7 +43,7 @@ class WallUpgradeSafetyTests(unittest.TestCase):
         cross-aspect fallback, so on 16:10 the guard used to evaluate to "absent ->
         skip the check" and the Okay click went in unprotected.
         '''
-        import pathlib  # imported here: app.core.bot needs win32 and only loads on Windows
+        import pathlib  # imported here: app.core.bot pulls in OpenCV/Tesseract at module level
         from app.core import bot as bot_module
 
         touched = []
