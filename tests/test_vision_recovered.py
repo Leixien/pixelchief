@@ -34,6 +34,33 @@ def _glyph_confidence(tokens, expected_char):
         vision.pytesseract = real
 
 
+class RandomSessionLengthTests(unittest.TestCase):
+
+    def test_range_normalization(self):
+        from app.utils.profile_settings_store import _normalize_random_range as norm
+
+        # A zero minimum switches the feature off and never drags the max along.
+        assert norm(0, 180) == (0, 180)
+        assert norm(0, 0) == (0, 0)
+        # A max below the min would make random.randint raise, so it is pulled up.
+        assert norm(120, 60) == (120, 120)
+        assert norm(120, 180) == (120, 180)
+        # Clamped to the Run page's own 1..999 spinbox range.
+        assert norm(-5, 5000) == (0, 999)
+        assert norm(5000, 5000) == (999, 999)
+        # Junk in the JSON must not crash the loader.
+        assert norm('abc', None) == (0, 0)
+        assert norm(None, 'x') == (0, 0)
+
+    def test_every_roll_lands_inside_the_range(self):
+        import random
+        from app.utils.profile_settings_store import _normalize_random_range as norm
+
+        low, high = norm(60, 180)
+        for _ in range(200):
+            assert low <= random.randint(low, high) <= high
+
+
 class WallUpgradeSafetyTests(unittest.TestCase):
 
     def test_confirm_refuses_without_the_gem_dialog_guard(self):

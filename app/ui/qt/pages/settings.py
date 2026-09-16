@@ -12,7 +12,7 @@ from app.services.window import DescendantInfo, WindowCandidate, WindowService
 from app.ui.qt.theme import SPACING, TOKENS
 from app.ui.qt.widgets import Card, PageTitle, SectionTitle, neutral_button, primary_button
 from app.utils.logger import setup_logger
-from app.utils.profile_settings_store import EARTHQUAKE_METHOD_OPTIONS, RESERVE_BUILDERS_MAX, WALL_UPGRADE_THRESHOLD_M_MAX, ProfileSettings, load_profile_settings, save_profile_settings
+from app.utils.profile_settings_store import EARTHQUAKE_METHOD_OPTIONS, RANDOM_MINUTES_CAP, RESERVE_BUILDERS_MAX, WALL_UPGRADE_THRESHOLD_M_MAX, ProfileSettings, load_profile_settings, save_profile_settings
 from app.utils.window_settings_store import clear_window_selection, load_window_selection, save_window_selection
 logger = setup_logger('SettingsPage')
 
@@ -135,6 +135,28 @@ class SettingsPage(QWidget):
         reserve_row.addWidget(reserve_unit)
         reserve_row.addStretch()
         card.card_layout.addLayout(reserve_row)
+        card.card_layout.addWidget(SectionTitle('Random session length'))
+        random_hint = QLabel('Ignore the Run page duration and pick a new random length inside this range every time you press Start. Set the minimum to 0 to turn this off and use the Run page value. Does not apply to "Run until maxed", which has no time limit by design.')
+        random_hint.setWordWrap(True)
+        random_hint.setStyleSheet(f'''color: {TOKENS['text_muted']};''')
+        card.card_layout.addWidget(random_hint)
+        random_row = QHBoxLayout()
+        self._random_min = QSpinBox()
+        self._random_min.setRange(0, RANDOM_MINUTES_CAP)
+        self._random_min.setFixedWidth(88)
+        random_row.addWidget(self._random_min)
+        random_to = QLabel('to')
+        random_to.setStyleSheet(f'''color: {TOKENS['text_muted']};''')
+        random_row.addWidget(random_to)
+        self._random_max = QSpinBox()
+        self._random_max.setRange(0, RANDOM_MINUTES_CAP)
+        self._random_max.setFixedWidth(88)
+        random_row.addWidget(self._random_max)
+        random_unit = QLabel('minutes per session')
+        random_unit.setStyleSheet(f'''color: {TOKENS['text_muted']};''')
+        random_row.addWidget(random_unit)
+        random_row.addStretch()
+        card.card_layout.addLayout(random_row)
         btn_row = QHBoxLayout()
         self._btn_save = primary_button('Save', parent = card)
         self._btn_save.clicked.connect(self._on_save)
@@ -249,11 +271,17 @@ class SettingsPage(QWidget):
             self._earthquake.setCurrentIndex(idx)
         self._wall_threshold.setValue(settings.wall_upgrade_threshold_m)
         self._reserve_builders.setValue(settings.reserve_builders)
+        self._random_min.setValue(settings.random_minutes_min)
+        self._random_max.setValue(settings.random_minutes_max)
         self._upgrade_order.setCurrentIndex(1 if settings.upgrade_order == 'cheapest' else 0)
 
 
     def _on_save(self):
-        save_profile_settings(ProfileSettings(earthquake_method = self._earthquake.currentText(), wall_upgrade_threshold_m = self._wall_threshold.value(), reserve_builders = self._reserve_builders.value(), upgrade_order = 'cheapest' if self._upgrade_order.currentIndex() == 1 else 'priciest'))
+        save_profile_settings(ProfileSettings(earthquake_method = self._earthquake.currentText(), wall_upgrade_threshold_m = self._wall_threshold.value(), reserve_builders = self._reserve_builders.value(), upgrade_order = 'cheapest' if self._upgrade_order.currentIndex() == 1 else 'priciest', random_minutes_min = self._random_min.value(), random_minutes_max = self._random_max.value()))
+        # save clamps max up to min; mirror that back so the UI never shows a range the bot will not use
+        saved = load_profile_settings()
+        self._random_min.setValue(saved.random_minutes_min)
+        self._random_max.setValue(saved.random_minutes_max)
         self._flash_status_bar('Saved')
 
     

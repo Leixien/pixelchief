@@ -16,6 +16,11 @@ RESERVE_BUILDERS_MAX = 5
 UPGRADE_ORDER_PRICIEST = 'priciest'
 UPGRADE_ORDER_CHEAPEST = 'cheapest'
 UPGRADE_ORDER_OPTIONS = (UPGRADE_ORDER_PRICIEST, UPGRADE_ORDER_CHEAPEST)
+# Random session length. Matches the Run page spinbox range; 0 as the minimum means
+# off, the same "0 = disabled" idiom the wall threshold uses.
+RANDOM_MINUTES_CAP = 999
+RANDOM_MINUTES_MIN_DEFAULT = 0
+RANDOM_MINUTES_MAX_DEFAULT = 0
 
 @dataclass
 class ProfileSettings:
@@ -23,6 +28,8 @@ class ProfileSettings:
     wall_upgrade_threshold_m: 'int' = WALL_UPGRADE_THRESHOLD_M_DEFAULT
     reserve_builders: 'int' = RESERVE_BUILDERS_DEFAULT
     upgrade_order: 'str' = UPGRADE_ORDER_PRICIEST
+    random_minutes_min: 'int' = RANDOM_MINUTES_MIN_DEFAULT
+    random_minutes_max: 'int' = RANDOM_MINUTES_MAX_DEFAULT
 
 
 def get_settings_path():
@@ -68,6 +75,20 @@ def _normalize_reserve_builders(raw):
     return max(0, min(RESERVE_BUILDERS_MAX, value))
 
 
+def _normalize_random_range(min_raw, max_raw):
+    '''``(min, max)`` clamped to 0..RANDOM_MINUTES_CAP, with max never below a live min.'''
+    def clamp(raw):
+        try:
+            return max(0, min(RANDOM_MINUTES_CAP, int(raw)))
+        except (TypeError, ValueError):
+            return 0
+
+    low, high = clamp(min_raw), clamp(max_raw)
+    if low <= 0:
+        return (0, high)
+    return (low, max(low, high))
+
+
 def load_profile_settings():
     path = get_settings_path()
     if not path.is_file():
@@ -77,11 +98,16 @@ def load_profile_settings():
         raw = json.loads(path.read_text(encoding = 'utf-8'))
         if not isinstance(raw, dict):
             return ProfileSettings()
+        rand_min, rand_max = _normalize_random_range(
+            raw.get('random_minutes_min', RANDOM_MINUTES_MIN_DEFAULT),
+            raw.get('random_minutes_max', RANDOM_MINUTES_MAX_DEFAULT))
         return ProfileSettings(
             earthquake_method = _normalize_earthquake_method(raw.get('earthquake_method')),
             wall_upgrade_threshold_m = _normalize_wall_threshold_m(raw.get('wall_upgrade_threshold_m', WALL_UPGRADE_THRESHOLD_M_DEFAULT)),
             reserve_builders = _normalize_reserve_builders(raw.get('reserve_builders', RESERVE_BUILDERS_DEFAULT)),
-            upgrade_order = _normalize_upgrade_order(raw.get('upgrade_order', UPGRADE_ORDER_PRICIEST)))
+            upgrade_order = _normalize_upgrade_order(raw.get('upgrade_order', UPGRADE_ORDER_PRICIEST)),
+            random_minutes_min = rand_min,
+            random_minutes_max = rand_max)
     except (json.JSONDecodeError, OSError):
         return ProfileSettings()  # [recovered: decompiler turned this into `return None`, crashing every caller on a corrupt settings.json]
 
@@ -90,10 +116,15 @@ def load_profile_settings():
 def save_profile_settings(settings):
     path = get_settings_path()
     path.parent.mkdir(parents = True, exist_ok = True)
+    rand_min, rand_max = _normalize_random_range(
+        getattr(settings, 'random_minutes_min', RANDOM_MINUTES_MIN_DEFAULT),
+        getattr(settings, 'random_minutes_max', RANDOM_MINUTES_MAX_DEFAULT))
     normalized = ProfileSettings(
         earthquake_method = _normalize_earthquake_method(settings.earthquake_method),
         wall_upgrade_threshold_m = _normalize_wall_threshold_m(getattr(settings, 'wall_upgrade_threshold_m', WALL_UPGRADE_THRESHOLD_M_DEFAULT)),
         reserve_builders = _normalize_reserve_builders(getattr(settings, 'reserve_builders', RESERVE_BUILDERS_DEFAULT)),
-        upgrade_order = _normalize_upgrade_order(getattr(settings, 'upgrade_order', UPGRADE_ORDER_PRICIEST)))
+        upgrade_order = _normalize_upgrade_order(getattr(settings, 'upgrade_order', UPGRADE_ORDER_PRICIEST)),
+        random_minutes_min = rand_min,
+        random_minutes_max = rand_max)
     payload = asdict(normalized)
     path.write_text(json.dumps(payload, indent = 2), encoding = 'utf-8')

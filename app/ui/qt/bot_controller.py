@@ -1,5 +1,6 @@
 '''Bot orchestration for the Qt UI.'''
 from __future__ import annotations
+import random
 import threading
 from PySide6.QtCore import QObject, Signal
 from app.core.bot import Bot
@@ -49,7 +50,15 @@ class BotController(QObject):
 
             try:
                 profile = load_profile_settings()
-                self._bot.start(method, minutes, star_bonus = star_bonus, status_callback = on_status, loot_callback = on_loot, state_callback = on_state, multi_run_players = multi_run_players, ranked_fill = ranked_fill, upgrade_walls = upgrade_walls, earthquake_method = profile.earthquake_method, builder_base = builder_base, loot_prioritise = loot_prioritise, wall_upgrade_threshold = profile.wall_upgrade_threshold_m * 1000000, auto_upgrade = auto_upgrade, reserve_builders = profile.reserve_builders, upgrade_order = profile.upgrade_order)
+                run_minutes = minutes
+                # Random session length: re-rolled per run, so no two sessions are the
+                # same length. Only for timed runs — an explicit "run until maxed"
+                # (minutes <= 0) is the user's choice and is left alone.
+                if run_minutes > 0 and profile.random_minutes_min > 0:
+                    run_minutes = random.randint(profile.random_minutes_min, profile.random_minutes_max)
+                    on_status(f'Random session length: {run_minutes} min (range {profile.random_minutes_min}-{profile.random_minutes_max})')
+                    logger.info('Random session length: %d min (range %d-%d)', run_minutes, profile.random_minutes_min, profile.random_minutes_max)
+                self._bot.start(method, run_minutes, star_bonus = star_bonus, status_callback = on_status, loot_callback = on_loot, state_callback = on_state, multi_run_players = multi_run_players, ranked_fill = ranked_fill, upgrade_walls = upgrade_walls, earthquake_method = profile.earthquake_method, builder_base = builder_base, loot_prioritise = loot_prioritise, wall_upgrade_threshold = profile.wall_upgrade_threshold_m * 1000000, auto_upgrade = auto_upgrade, reserve_builders = profile.reserve_builders, upgrade_order = profile.upgrade_order)
             except InterruptedError:
                 logger.info('Bot thread stopped by user')
             except Exception as exc:
