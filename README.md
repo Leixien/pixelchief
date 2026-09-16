@@ -1,5 +1,9 @@
 # BasePilot
 
+> Fork of [Mikyy85/coc-bot](https://github.com/Mikyy85/coc-bot) (BasePilot, MIT). The Python
+> sources here were reconstructed from the released bytecode, so some logic was lost in
+> decompilation and is being repaired commit by commit — expect differences from upstream.
+
 **Autopilot for your Clash of Clans base.** BasePilot farms, upgrades, and knows when
 to do nothing — it runs unattended until your village genuinely has nothing left to
 start, then waits for a builder to free up and gets back to work.
