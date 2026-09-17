@@ -2,6 +2,7 @@ import os
 import sys
 from pathlib import Path
 
+
 def get_resource_path(relative_path):
     '''Get absolute path to resource, works for dev and for PyInstaller.'''
     
@@ -84,6 +85,38 @@ Return ``templates/<16_10|16_9>/…`` for the active aspect (see :class:`app.con
     from app.config import Config
     sub = Config().aspect_key
     return get_resource_path(f'''templates/{sub}/{template_name}''')
+
+
+# Templates the code looks up through `get_template_path(...).exists()`, i.e. it carries
+# on without them. That is the right call for an optional signal and the wrong one for a
+# silent loss of function, so each aspect folder that lacks one gets told at load time —
+# templates/16_10/needgold_x.png went missing exactly this way and disabled the gem-dialog
+# guard on every 16:10 display without a word.
+OPTIONAL_TEMPLATES = {
+    'needgold_x.png': 'buy-with-gems dialog guard — wall upgrades stay disabled without it',
+    'reload.png': 'RELOAD button — cannot recover from a dropped connection without it',
+    'claim_btn.png': 'daily reward popup — cannot be dismissed without it',
+    'dailyreward_x.png': 'daily reward popup — cannot be dismissed without it' }
+_optional_report_done = set()
+
+
+def report_missing_optional_templates(aspect_key):
+    """Log once per aspect which optional templates are absent, and what each one costs."""
+    if not aspect_key or aspect_key in _optional_report_done:
+        return None
+    # Built here, not at module scope: setup_logger imports from this module, so a
+    # module-level call would run while this module is still initializing.
+    from app.utils.logger import setup_logger
+    logger = setup_logger('Templates')
+    _optional_report_done.add(aspect_key)
+    missing = [(name, why) for name, why in sorted(OPTIONAL_TEMPLATES.items())
+               if not get_resource_path(f'''templates/{aspect_key}/{name}''').is_file()]
+    if not missing:
+        logger.info('Templates: every optional template is present for %s', aspect_key)
+        return None
+    for name, why in missing:
+        logger.warning('Templates: %s is missing for %s — %s', name, aspect_key, why)
+    return None
 
 
 def ensure_dir(path):

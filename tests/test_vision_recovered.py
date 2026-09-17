@@ -81,6 +81,9 @@ class AutoRestartLoopTests(unittest.TestCase):
                 if state['left'] > 0:
                     state['left'] -= 1
                     raise RuntimeError('boom')
+                cb = kw.get('loot_callback')
+                if cb:  # one session earns a fixed amount, counting up from zero
+                    cb(100, 200, 5, 60.0)
 
             def stop(self):
                 self.stop_event.set()
@@ -130,6 +133,22 @@ class AutoRestartLoopTests(unittest.TestCase):
                   upgrade_walls = False, multi_run_players = None)
         ctl._bot_thread.join(5)
         assert len(runs) == cap, f'expected to stop after {cap} failures, ran {len(runs)}'
+
+    def test_loot_totals_accumulate_across_sessions(self):
+        ctl, runs, mins = self._controller(pause_min = 1, pause_max = 1)
+        seen = []
+        ctl.lootChanged = type('S', (), {'emit': lambda _s, *a: seen.append(a)})()
+        real_wait = ctl._stop_requested.wait
+        def fast_wait(timeout = None):
+            if len(runs) >= 3:
+                ctl._stop_requested.set()
+            return real_wait(0)
+        ctl._stop_requested.wait = fast_wait
+        ctl.start(method = 'm', minutes = mins, star_bonus = False, ranked_fill = False,
+                  upgrade_walls = False, multi_run_players = None)
+        ctl._bot_thread.join(5)
+        # Three sessions of 100/200/5 each -> the totals climb instead of resetting.
+        assert seen == [(100, 200, 5, 60.0), (200, 400, 10, 120.0), (300, 600, 15, 180.0)], seen
 
     def test_run_until_maxed_never_loops(self):
         ctl, runs, _ = self._controller(pause_min = 1, pause_max = 1, run_minutes = 0)

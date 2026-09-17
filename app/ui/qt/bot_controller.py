@@ -42,6 +42,12 @@ class BotController(QObject):
 
         def worker():
             error_msg = None
+            # The bot resets its loot counters on every start(), so in a restart loop the
+            # UI would only ever show the last session. Carry the finished sessions and
+            # report the total since Start; with the loop off the carry stays 0 and this
+            # is exactly the old behaviour.
+            carried = [0, 0, 0, 0.0]
+            current = [0, 0, 0, 0.0]
 
             def on_status(msg):
                 self.statusChanged.emit(msg, 'not found' in msg.lower())
@@ -50,7 +56,15 @@ class BotController(QObject):
                 self.stateChanged.emit(dict(payload))
 
             def on_loot(gold, elixir, dark, elapsed):
-                self.lootChanged.emit(int(gold), int(elixir), int(dark), float(elapsed))
+                current[:] = [int(gold), int(elixir), int(dark), float(elapsed)]
+                self.lootChanged.emit(carried[0] + current[0], carried[1] + current[1],
+                                      carried[2] + current[2], carried[3] + current[3])
+
+            def bank_session():
+                '''Fold the finished session into the carry and clear it for the next.'''
+                for i in range(4):
+                    carried[i] += current[i]
+                current[:] = [0, 0, 0, 0.0]
 
 
             failures = 0
@@ -82,6 +96,7 @@ class BotController(QObject):
                     cycle_failed = True
                     logger.exception('Session %d failed', session)
 
+                bank_session()
                 # Auto-restart: pause, then run again. Needs a timed run (nothing to
                 # repeat when the session has no end) and a pause above 0.
                 if self._stop_requested.is_set() or minutes <= 0 or profile.repeat_pause_min <= 0:

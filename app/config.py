@@ -1,7 +1,7 @@
 import json
 import sys
 from typing import Any, Dict, List, Optional, Tuple
-from app.utils.common import get_resource_path
+from app.utils.common import get_resource_path, report_missing_optional_templates
 from app.utils.logger import setup_logger
 logger = setup_logger('Config')
 ASPECT_16_10 = '16_10'
@@ -198,6 +198,7 @@ Returns True when the aspect (and on-disk config) actually changed.
                 temp_data = json.load(f)
             self.data = temp_data[0] if isinstance(temp_data, list) else temp_data
             logger.info(f'''Loaded config profile {self.aspect_key} (ref {self.ref_width}x{self.ref_height}): {config_path.name}''')
+            report_missing_optional_templates(self.aspect_key)
             return None
         except FileNotFoundError:
             logger.error(f'''data.json not found for aspect {self.aspect_key}!''')
