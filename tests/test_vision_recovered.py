@@ -61,6 +61,84 @@ class RandomSessionLengthTests(unittest.TestCase):
             assert low <= random.randint(low, high) <= high
 
 
+class AutoRestartLoopTests(unittest.TestCase):
+    '''Drive BotController's worker with a fake Bot: no Qt event loop, no game.'''
+
+    def _controller(self, *, pause_min, pause_max, run_minutes = 30, fail_times = 0):
+        import threading
+        from app.ui.qt import bot_controller as bc
+        from app.utils.profile_settings_store import ProfileSettings
+
+        runs = []
+        state = {'left': fail_times}
+
+        class FakeBot:
+            def __init__(self):
+                self.stop_event = threading.Event()
+
+            def start(self, method, minutes, **kw):
+                runs.append(minutes)
+                if state['left'] > 0:
+                    state['left'] -= 1
+                    raise RuntimeError('boom')
+
+            def stop(self):
+                self.stop_event.set()
+
+        ctl = bc.BotController.__new__(bc.BotController)
+        # QObject.__init__ is needed before touching signals; the fakes replace them.
+        import PySide6.QtCore as qtcore
+        qtcore.QObject.__init__(ctl)
+        ctl._bot_version = 'test'
+        ctl._bot = FakeBot()
+        ctl._bot_thread = None
+        ctl._stop_requested = threading.Event()
+        real_load = bc.load_profile_settings
+        bc.load_profile_settings = lambda: ProfileSettings(
+            repeat_pause_min = pause_min, repeat_pause_max = pause_max)
+        self.addCleanup(lambda: setattr(bc, 'load_profile_settings', real_load))
+        return ctl, runs, run_minutes
+
+    def test_single_session_when_pause_is_zero(self):
+        ctl, runs, mins = self._controller(pause_min = 0, pause_max = 0)
+        ctl.start(method = 'm', minutes = mins, star_bonus = False, ranked_fill = False,
+                  upgrade_walls = False, multi_run_players = None)
+        ctl._bot_thread.join(5)
+        assert runs == [mins], runs
+
+    def test_loop_repeats_until_stop(self):
+        # A pause of 0 minutes is not selectable in the UI, so use the smallest range
+        # and stop the loop from outside after a few cycles.
+        ctl, runs, mins = self._controller(pause_min = 1, pause_max = 1)
+        real_wait = ctl._stop_requested.wait
+        def fast_wait(timeout = None):
+            # Collapse the pause, and end the loop once we have seen enough cycles.
+            if len(runs) >= 3:
+                ctl._stop_requested.set()
+            return real_wait(0)
+        ctl._stop_requested.wait = fast_wait
+        ctl.start(method = 'm', minutes = mins, star_bonus = False, ranked_fill = False,
+                  upgrade_walls = False, multi_run_players = None)
+        ctl._bot_thread.join(5)
+        assert len(runs) == 3, runs
+
+    def test_gives_up_after_consecutive_failures(self):
+        from app.utils.profile_settings_store import REPEAT_MAX_CONSECUTIVE_FAILURES as cap
+        ctl, runs, mins = self._controller(pause_min = 1, pause_max = 1, fail_times = 99)
+        ctl._stop_requested.wait = lambda timeout = None: False  # skip the pause
+        ctl.start(method = 'm', minutes = mins, star_bonus = False, ranked_fill = False,
+                  upgrade_walls = False, multi_run_players = None)
+        ctl._bot_thread.join(5)
+        assert len(runs) == cap, f'expected to stop after {cap} failures, ran {len(runs)}'
+
+    def test_run_until_maxed_never_loops(self):
+        ctl, runs, _ = self._controller(pause_min = 1, pause_max = 1, run_minutes = 0)
+        ctl.start(method = 'm', minutes = 0, star_bonus = False, ranked_fill = False,
+                  upgrade_walls = False, multi_run_players = None)
+        ctl._bot_thread.join(5)
+        assert runs == [0], runs
+
+
 class WallUpgradeSafetyTests(unittest.TestCase):
 
     def test_confirm_refuses_without_the_gem_dialog_guard(self):
