@@ -7,8 +7,9 @@ from typing import Callable, List, Optional, Tuple
 import cv2
 
 from app.config import ASPECT_16_10, ASPECT_16_9, Config
-from app.core.strategies import AttackStrategy, EdragStrategy, TroopSpamStrategy, _EDRAG_DELAY, _AdbBoundaryUnavailable
-from app.core.upgrader import AUTO_UPGRADE_MODES, LIVE_UPGRADE_MODES, MODE_OFF, UpgradeAdvisor
+from app.core.strategies import AllTroopsStrategy, AttackStrategy, EdragStrategy, TroopSpamStrategy, _EDRAG_DELAY, _AdbBoundaryUnavailable
+from app.core.shop import ShopBuilder
+from app.core.upgrader import AUTO_UPGRADE_MODES, LIVE_UPGRADE_MODES, MODE_DRY, MODE_OFF, UpgradeAdvisor
 from app.core.village_state import read_hud_triplet_stable, read_village_state, read_village_state_stable
 from app.services.input import InputService
 from app.services.vision import BOTTOM_HALF_BOT_TEMPLATES, TOP_HALF_BOT_TEMPLATES, VisionService
@@ -602,6 +603,13 @@ deselect, which would eat the upcoming Attack click.'''
             return None
         self._auto_upgrade_last_scan = now
         try:
+            # New buildings first: on a fresh village they matter more than upgrades,
+            # and the pass below then reads the builder chip after them.
+            if getattr(self, '_shop', None) is None:
+                self._shop = ShopBuilder(self.window, self.input, self.vision, self.config, self.stop_event)
+            placed = self._shop.run(dry = mode == MODE_DRY, reserve_builders = getattr(self, '_reserve_builders', 1))
+            if placed and getattr(self, '_status_callback', None):
+                self._status_callback(f'''Shop: placed {placed} new building(s)''')
             if getattr(self, '_advisor', None) is None:
                 self._advisor = UpgradeAdvisor(self.window, self.input, self.vision, self.config, self.stop_event)
             result = self._advisor.run_pass(mode, reserve_builders = getattr(self, '_reserve_builders', 1),
@@ -1638,6 +1646,8 @@ deselect, which would eat the upcoming Attack click.'''
             return TroopSpamStrategy(self.input, self.vision, self.config, self.stop_event, 'superminion', 3.1, status_callback = cb, earthquake_method = eq)
         if method_id == 3:
             return TroopSpamStrategy(self.input, self.vision, self.config, self.stop_event, 'valkyrie', 5.5, status_callback = cb, earthquake_method = eq)
+        if method_id == 6:
+            return AllTroopsStrategy(self.input, self.vision, self.config, self.stop_event, earthquake_method = eq)
         if method_id == 4:
             return EdragStrategy(self.input, self.vision, self.config, self.stop_event, status_callback = cb, earthquake_method = eq)
         return TroopSpamStrategy(self.input, self.vision, self.config, self.stop_event, 'sneaky', 15, status_callback = cb, earthquake_method = eq)

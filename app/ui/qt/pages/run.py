@@ -16,7 +16,8 @@ class RunPage(QWidget):
         'Valkyries',
         'Sneaky Goblins',
         'Super Minions',
-        'Edrags']
+        'Edrags',
+        'New village']
     _VILLAGE_LABELS = [
         'Home Village',
         'Builder Base']

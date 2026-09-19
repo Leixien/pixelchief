@@ -15,6 +15,10 @@ _EARTHQUAKE_RANDOM_LINE_FROM_BOTTOM = (4, 10)
 _EDRAG_COUNT = 12
 _EDRAG_DELAY = 0.2
 _EDRAG_CORNER_MARGIN = 100
+# ponytail: fixed drops per slot, extra taps on an emptied slot do nothing; raise if troops stay in the bar
+_SLOT_DROPS = 40
+_SLOT_DROP_DELAY = 0.1
+_EMPTY_SLOT_THRESHOLD = 0.6  # 16:9 capture: filled card 0.11, dashed placeholders 0.70-1.00
 _DIAMOND_EDGES = (('left', 'top'), ('top', 'right'))
 
 class _AdbBoundaryUnavailable(RuntimeError):
@@ -604,14 +608,20 @@ slot nearest the top vertex is left empty (virtual troop at the apex).
         i = None
 
 
-    def _deploy_diamond_perimeter_troop(self, frame, template_name, stop_event = None, *, count = _EDRAG_COUNT, delay = _EDRAG_DELAY):
-        '''Select troop in the bottom bar and click ``count`` points on the diamond perimeter.'''
+    def _deploy_diamond_perimeter_troop(self, frame, template_name, stop_event = None, *, count = _EDRAG_COUNT, delay = _EDRAG_DELAY, point = None):
+        '''Select troop in the bottom bar and click ``count`` points on the diamond perimeter.
+        ``point`` selects that bar slot directly; ``template_name`` then only labels diagnostics.'''
         ev = stop_event or self.stop_event
         frame, _ = self._reward_checkpoint(frame)
-        roi = self.vision.bottom_half_region(frame)
-        (tx, ty) = self.vision.find_template(frame, template_name, region = roi)
-        if tx is None:
-            return False
+        reselect = template_name
+        if point is None:
+            roi = self.vision.bottom_half_region(frame)
+            (tx, ty) = self.vision.find_template(frame, template_name, region = roi)
+            if tx is None:
+                return False
+        else:
+            (tx, ty) = point
+            reselect = None  # no template to find the slot again after an event overlay
         self._deployment_point(f'{template_name} select', tx, ty)
         self.input.click(tx, ty, pause = 0.3, rand = False)
         if ev and ev.wait(0.2):
@@ -623,7 +633,7 @@ slot nearest the top vertex is left empty (virtual troop at the apex).
             if ev and ev.is_set():
                 range(count)
                 return True
-            fresh, handled = self._reward_checkpoint(selected=template_name)
+            fresh, handled = self._reward_checkpoint(selected=reselect)
             if handled and fresh is None:
                 break
             if fresh is not None:
@@ -810,6 +820,50 @@ class TroopSpamStrategy(AttackStrategy):
             self._deployment_snapshot('after')
 
 
+
+
+class AllTroopsStrategy(AttackStrategy):
+    '''New village: deploy whatever the bar holds, slot by slot from the left, so it keeps
+    working as the Town Hall unlocks troops. Slot centres come from ``deploy_slots`` in
+    data.json; a spell or hero in a slot lands on the border like the troops.'''
+
+    def _filled_slots(self, frame):
+        '''Capture-space centres of the occupied slots. The bar fills from the left, so the
+        first dashed placeholder (``emptyslot.png``, its top-left corner) ends it.'''
+        (fh, fw) = frame.shape[:2]
+        (sw, sh) = self.config.scale_point(self.config.data.get('deploy_slot_size', (0, 0)))
+        filled = []
+        for slot in self.config.data.get('deploy_slots') or ():
+            (cx, cy) = self.config.scale_point(slot)
+            (x, y) = (max(0, cx - sw // 2), max(0, cy - sh // 2))
+            region = (x, y, min(sw // 2, fw - x), min(sh // 2, fh - y))
+            if self.vision.find_template(frame, 'emptyslot.png', threshold = _EMPTY_SLOT_THRESHOLD, region = region)[0] is not None:
+                break
+            filled.append((cx, cy))
+        return filled
+
+    def execute(self, frame, stop_event = None):
+        ev = stop_event or self.stop_event
+        self._sync_frame_size(frame)
+        if not self.config.data.get('deploy_slots'):
+            logger.warning('New village: no deploy_slots in data.json for %s — cannot find the troop bar', self.config.aspect_key)
+            return False
+        slots = self._filled_slots(frame)
+        if not slots:
+            logger.warning('New village: the deployment bar is empty')
+            return False
+        logger.info('Executing new village strategy (%d filled slots)', len(slots))
+        self._adb_border_probe_used = False
+        self._adb_border_cache = None
+        self._adb_deployment_started = False
+        self._deployment_snapshot('before', frame)
+        for index, point in enumerate(slots):
+            if ev and ev.is_set():
+                break
+            self._deploy_diamond_perimeter_troop(frame, f'slot {index + 1}', ev, count = _SLOT_DROPS, delay = _SLOT_DROP_DELAY, point = point)
+            frame = None  # later slots read a fresh capture for the event overlay check
+        self._deployment_snapshot('after')
+        return True
 
 
 class EdragStrategy(AttackStrategy):

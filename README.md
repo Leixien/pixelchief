@@ -42,6 +42,12 @@ disconnects, and stray screens. Builder Base farming included. See
 - **Rusher** — takes the Town Hall as soon as it's affordable.
 - **Dry run** — logs what it *would* start and clicks nothing. Good first setting.
 
+Before upgrading, every mode also **builds what the Town Hall unlocked**: it opens *Shop →
+Buildings & Traps*, buys the first available card priced in gold or elixir, and confirms the
+spot the game picks for it — no layout, the building lands wherever the game puts it. Cards
+priced in gems, free cards (the tutorial Walls) and prices shown in red are never bought, and
+nothing happens without a free builder above *Reserve builders*. 16:9 only for now.
+
 **Run until maxed.** No time limit. Farm → spend → and when storages are full with
 every builder busy, BasePilot **idles** instead of raiding for loot that would
 overflow, rechecking every few minutes and resuming the moment something frees up.
@@ -134,6 +140,13 @@ Three things to get right before you press Start:
 
 If the troop you picked on the Run page isn't in your army, the raid aborts immediately and the
 log reads `Troop <name> not found!`.
+
+**New village.** A fresh account has none of the troops above. Pick *New village* and BasePilot
+selects every filled slot of the deployment bar in turn, left to right, and drops it on the map
+border — whatever the Town Hall has unlocked, spells and heroes included once they appear. It
+stops at the first empty (dashed) slot, and an empty bar counts as missing troops. Slot
+positions ship for 16:9 only (`deploy_slots` in `templates/<aspect>/data.json`); on 16:10 the
+log reads `New village: no deploy_slots in data.json`.
 
 Sneaky Goblins and Super Minions deploy the same way. Edrags need at least 12. Full deploy
 mechanics — drag patterns, earthquake placement modes, hero order — are in
