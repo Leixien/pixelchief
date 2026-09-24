@@ -8,7 +8,7 @@ from app.ui.qt._constants import ATTACK_STRATEGIES, BUILDER_BASE_ATTACK_STRATEGI
 from app.ui.qt.bot_controller import BotController
 from app.ui.qt.dialogs import RankedAttackConfirmDialog, show_bb_prioritise_help, show_error, show_under_development
 from app.ui.qt.theme import SPACING, TOKENS
-from app.ui.qt.widgets import Card, HelpButton, SectionTitle, StepperButton, ToggleSwitch, chip_button, danger_button, neutral_button, primary_button, segment_button
+from app.ui.qt.widgets import Card, HelpButton, SectionTitle, StepperButton, ToggleSwitch, chip_button, danger_button, neutral_button, primary_button, segment_button, set_help
 from app.utils.player_list_store import PlayerEntry, load_players
 
 class RunPage(QWidget):
@@ -26,6 +26,20 @@ class RunPage(QWidget):
         ('Dry run', 'dry'),
         ('Maxer', 'maxer'),
         ('Rusher', 'rusher')]
+    _HELP = {
+        'Home Village': 'Farm the main village. The bot switches there itself if the game is on the Builder Base.',
+        'Builder Base': 'Farm the Builder Base with Baby Dragons. Auto upgrade and Run until maxed are Home Village only.',
+        'Valkyries': 'Recommended army: 42 Valkyries, 11 Earthquakes, 1 Log Launcher plus heroes. Valkyries are dragged along the base edges; if they are not in the bar the bot loads them from the top Saved Recipe.',
+        'Sneaky Goblins': 'Sneaky Goblins dragged along the base edges, then the bot surrenders after a few seconds: quick loot, few stars.',
+        'Super Minions': 'Super Minions dragged along the base edges, then siege, heroes and Earthquakes.',
+        'Edrags': 'At least 12 Electro Dragons, dropped one by one around the base.',
+        'New village': 'For a fresh account: drops every filled slot of the troop bar, left to right, whatever the Town Hall has unlocked. 16:9 only.',
+        'Baby Dragon': 'Builder Base army: Baby Dragons around the base, then the Battle Machine or Flying Machine.',
+        'Off': 'Never upgrade buildings. The bot only farms.',
+        'Dry run': 'Logs what it would upgrade and clicks nothing. Use it to check the choices before letting it spend.',
+        'Maxer': 'Starts affordable upgrades with your loot and never touches the Town Hall. Order is set in Settings; hero (dark elixir) upgrades come first.',
+        'Rusher': 'Like Maxer, but upgrades the Town Hall as soon as it is affordable.',
+    }
 
     def __init__(self, controller, navigate_to, parent = None):
         super().__init__(parent)
@@ -75,6 +89,7 @@ class RunPage(QWidget):
         self._village_group.setExclusive(True)
         for i, label in enumerate(self._VILLAGE_LABELS):
             btn = segment_button(label, parent = wrapper)
+            set_help(btn, self._HELP[label])
             if label == 'Home Village':
                 btn.setChecked(True)
             self._village_group.addButton(btn, i)
@@ -113,6 +128,7 @@ class RunPage(QWidget):
         self._strategy_group.setExclusive(True)
         for i, label in enumerate(self._STRATEGY_LABELS):
             btn = segment_button(label, parent = card)
+            set_help(btn, self._HELP[label])
             if label == 'Valkyries':
                 btn.setChecked(True)
             self._strategy_group.addButton(btn, i)
@@ -129,12 +145,14 @@ class RunPage(QWidget):
         self._bb_strategy_group.setExclusive(True)
         for i, label in enumerate(BUILDER_BASE_ATTACK_STRATEGIES):
             btn = segment_button(label, parent = card)
+            set_help(btn, self._HELP[label])
             if label == 'Baby Dragon':
                 btn.setChecked(True)
             self._bb_strategy_group.addButton(btn, i)
             row.addWidget(btn)
         for label in BUILDER_BASE_ATTACK_STRATEGIES_UNDER_DEV:
             btn = segment_button(label, parent = card, under_development = True)
+            set_help(btn, 'Under development, not usable yet.')
             btn.clicked.connect((lambda _checked = False: show_under_development(self.window())))
             row.addWidget(btn)
         row.addStretch()
@@ -147,9 +165,11 @@ class RunPage(QWidget):
         card.card_layout.addWidget(SectionTitle('Schedule'))
         self._star_bonus = ToggleSwitch('Star Bonus', parent = card)
         self._star_bonus.toggled.connect(self._on_star_bonus_toggle)
+        set_help(self._star_bonus, 'Attack only until the daily Star Bonus is collected, then stop (at most 15 minutes). The duration below is ignored.')
         card.card_layout.addWidget(self._star_bonus)
         self._until_maxed = ToggleSwitch('Run until maxed (no time limit)', parent = card)
         self._until_maxed.toggled.connect(self._on_until_maxed_toggle)
+        set_help(self._until_maxed, 'No time limit: farm, upgrade and wait for builders until you press Stop. Best together with Auto upgrade.')
         card.card_layout.addWidget(self._until_maxed)
         until_hint = QLabel('Farms, upgrades, and idles in a loop until you press Stop. When storages are full and nothing can be started, the bot waits and rechecks every 5 minutes instead of attacking for nothing.')
         until_hint.setWordWrap(True)
@@ -165,6 +185,7 @@ class RunPage(QWidget):
         self._minutes_spin.setValue(15)
         self._minutes_spin.setFixedSize(56, 28)
         self._minutes_spin.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        set_help(self._minutes_spin, 'How long the session lasts, in minutes (1-999). Replaced by the random length in Settings when that is on.')
         step_col = QVBoxLayout()
         step_col.setSpacing(2)
         step_col.setContentsMargins(0, 0, 0, 0)
@@ -172,6 +193,8 @@ class RunPage(QWidget):
         self._btn_spin_up.clicked.connect((lambda : self._step_minutes(1)))
         self._btn_spin_down = StepperButton(up = False, parent = card)
         self._btn_spin_down.clicked.connect((lambda : self._step_minutes(-1)))
+        set_help(self._btn_spin_up, 'One more minute.')
+        set_help(self._btn_spin_down, 'One minute less.')
         step_col.addWidget(self._btn_spin_up)
         step_col.addWidget(self._btn_spin_down)
         self._minutes_unit = QLabel('minutes')
@@ -196,6 +219,8 @@ class RunPage(QWidget):
         self._btn_20m = chip_button('20m', parent = card)
         self._btn_20m.clicked.connect((lambda : self._set_minutes(20)))
         preset_row.addWidget(self._btn_20m)
+        for chip in (self._btn_5m, self._btn_10m, self._btn_20m):
+            set_help(chip, f'Set the duration to {chip.text()[:-1]} minutes.')
         preset_row.addStretch()
         card.card_layout.addLayout(preset_row)
         self._on_star_bonus_toggle(self._star_bonus.isChecked())
@@ -212,25 +237,30 @@ class RunPage(QWidget):
         self._auto_upgrade_group.setExclusive(True)
         for i, (label, _key) in enumerate(self._AUTO_UPGRADE_LABELS):
             btn = segment_button(label, parent = card)
+            set_help(btn, self._HELP[label])
             if label == 'Off':
                 btn.setChecked(True)
             self._auto_upgrade_group.addButton(btn, i)
             upg_row.addWidget(btn)
         upg_row.addStretch()
         card.card_layout.addLayout(upg_row)
-        upg_hint = QLabel('Maxer starts the cheapest affordable upgrade with your loot (never the Town Hall); Rusher grabs the Town Hall the moment it is affordable. Dry run only logs what it would start. Works at any Town Hall level. Reserve builders for walls in Settings.')
+        upg_hint = QLabel('Maxer starts an affordable upgrade with your loot (never the Town Hall; order in Settings); Rusher grabs the Town Hall the moment it is affordable. Dry run only logs what it would start. Works at any Town Hall level. Reserve builders for walls in Settings.')
         upg_hint.setWordWrap(True)
         upg_hint.setStyleSheet(f'''color: {TOKENS['text_muted']};''')
         card.card_layout.addWidget(upg_hint)
         self._ranked = ToggleSwitch('Ranked attack fill', parent = card, danger = True)
+        set_help(self._ranked, 'Attack through Ranked battles instead of normal farming, until the daily ranked limit is reached. Uses up your ranked attacks, so Start asks for confirmation. The minimum loot filter is skipped here.')
         card.card_layout.addWidget(self._ranked)
         self._upgrade_walls = ToggleSwitch('Upgrade walls', parent = card)
+        set_help(self._upgrade_walls, 'Between attacks, buy wall upgrades when gold or elixir passes the threshold in Settings, or when storages are full. Elixir first; some gold is kept for matchmaking.')
         card.card_layout.addWidget(self._upgrade_walls)
         mr_row = QHBoxLayout()
         self._multi_run = ToggleSwitch('Multi-run', parent = card)
+        set_help(self._multi_run, 'Farm several accounts in turn: for each player marked Run in the player list, switch account, run a full session, collect resources, then move to the next.')
         mr_row.addWidget(self._multi_run)
         mr_row.addStretch()
         edit_players = neutral_button('Edit player list', parent = card)
+        set_help(edit_players, 'Open the list of accounts used by Multi-run.')
         edit_players.clicked.connect((lambda : self._navigate_to('players')))
         mr_row.addWidget(edit_players)
         card.card_layout.addLayout(mr_row)
@@ -249,6 +279,7 @@ class RunPage(QWidget):
         self._bb_prioritise_group.setExclusive(True)
         for i, label in enumerate(BUILDER_BASE_PRIORITISE_LABELS):
             btn = segment_button(label, parent = card)
+            set_help(btn, {'Gold': 'Wait for 2 stars, then end the battle.', 'Both': 'Wait for 1 star, then end the battle.', 'Elixir': 'Surrender right after deploying. Loses trophies.'}[label])
             if label == 'Both':
                 btn.setChecked(True)
             self._bb_prioritise_group.addButton(btn, i)
@@ -256,13 +287,16 @@ class RunPage(QWidget):
         prior_row.addStretch()
         card.card_layout.addLayout(prior_row)
         self._bb_upgrade_walls = ToggleSwitch('Upgrade walls', parent = card, under_development = True)
+        set_help(self._bb_upgrade_walls, 'Under development, not usable yet.')
         card.card_layout.addWidget(self._bb_upgrade_walls)
         mr_row = QHBoxLayout()
         self._bb_multi_run = ToggleSwitch('Multi-run', parent = card, under_development = True)
+        set_help(self._bb_multi_run, 'Under development, not usable yet.')
         mr_row.addWidget(self._bb_multi_run)
         mr_row.addStretch()
         edit_players = neutral_button('Edit player list', parent = card)
         edit_players.setStyleSheet(f'''color: {TOKENS['text_muted']};''')
+        set_help(edit_players, 'Under development, not usable yet.')
         edit_players.clicked.connect((lambda : show_under_development(self.window())))
         mr_row.addWidget(edit_players)
         card.card_layout.addLayout(mr_row)
@@ -302,6 +336,15 @@ class RunPage(QWidget):
         self._stat_loot = stat(1, 0, 'Loot this session')
         self._stat_loot_rate = stat(1, 1, 'Loot / hour')
         self._stat_walls = stat(1, 2, 'Walls upgraded')
+        for widget, text in (
+                (self._stat_state, 'FARMING = attacking; IDLING = storages full and nothing to build, rechecking every 5 minutes.'),
+                (self._stat_builders, 'Free builders / total builders. Updated while Auto upgrade is on.'),
+                (self._stat_lab, 'Free laboratory / total. Research is not automated: start it yourself.'),
+                (self._stat_storages, 'Storage levels read from the village screen.'),
+                (self._stat_loot, 'Gold / elixir / dark elixir gained since Start, read from the village screen after each raid.'),
+                (self._stat_loot_rate, 'Gold / elixir / dark elixir per hour. Shown after 10 minutes.'),
+                (self._stat_walls, 'Wall upgrades bought since Start.')):
+            set_help(widget, text)
         self._stat_note = QLabel('Start the bot to see live village state here. Builders / lab / storages update while Auto upgrade is on.')
         self._stat_note.setWordWrap(True)
         self._stat_note.setStyleSheet(f'''color: {TOKENS['text_muted']};''')
@@ -372,11 +415,13 @@ class RunPage(QWidget):
         self._btn_start = primary_button('Start', parent = card)
         self._btn_start.setMinimumHeight(42)
         self._btn_start.clicked.connect(self.start_bot)
+        set_help(self._btn_start, 'Start the bot with the choices above. The game must be open, at 16:9 or 16:10.')
         btn_row.addWidget(self._btn_start)
         self._btn_stop = danger_button('Stop', parent = card)
         self._btn_stop.setMinimumHeight(42)
         self._btn_stop.setEnabled(False)
         self._btn_stop.clicked.connect(self._controller.stop)
+        set_help(self._btn_stop, 'Stop the bot after the current action. The only way to end Run until maxed.')
         btn_row.addWidget(self._btn_stop)
         card.card_layout.addLayout(btn_row)
         return card

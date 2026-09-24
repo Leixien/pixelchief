@@ -34,6 +34,40 @@ def _glyph_confidence(tokens, expected_char):
         vision.pytesseract = real
 
 
+class MinLootTests(unittest.TestCase):
+
+    def test_reads_scouted_loot_from_fixture(self):
+        import cv2
+        from app.utils.common import get_resource_path
+        if vision.pytesseract is None:
+            self.skipTest('pytesseract not installed')
+        frame = cv2.imread(str(get_resource_path('tests/fixtures/16_9/battle-barbarians.png')))
+        s = frame.shape[1] / 2560
+        roi = tuple(int(v * s) for v in (108, 155, 300, 195))  # templates/16_9/data.json enemy_loot
+        # TH3 base: no dark elixir row, so dark reads as 0.
+        assert VisionService.read_enemy_loot(frame, roi) == (1142, 4012, 0)
+
+    def test_skips_until_every_minimum_is_met(self):
+        from app.core.bot import Bot
+
+        # Gold short, then dark short, then a base meeting every minimum.
+        bases = [(100000, 900000, 9000), (900000, 900000, 1000), (600000, 600000, 6000)]
+        clicks = []
+        fake = types.SimpleNamespace(
+            _min_loot = (500000, 500000, 5000),
+            _status_callback = None,
+            _check_stop = lambda: None,
+            stop_event = types.SimpleNamespace(wait = lambda t: False),
+            window = types.SimpleNamespace(screenshot = lambda: np.zeros((1440, 2560, 3), np.uint8)),
+            config = types.SimpleNamespace(aspect_key = '16_9'),
+            vision = types.SimpleNamespace(read_enemy_loot = lambda f, roi: bases[len(clicks)]),
+            input = types.SimpleNamespace(click = lambda x, y, pause = 0: clicks.append((x, y))),
+            _config_rect = lambda key, frame: (0, 0, 10, 10),
+            _find_next_button = lambda frame, region: (2300, 1100))
+        Bot._skip_poor_bases(fake)
+        assert len(clicks) == 2
+
+
 class RandomSessionLengthTests(unittest.TestCase):
 
     def test_range_normalization(self):

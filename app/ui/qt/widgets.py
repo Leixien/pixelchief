@@ -1,11 +1,17 @@
 '''Reusable Qt widgets for the BasePilot UI.'''
 from __future__ import annotations
+import html
 from collections.abc import Callable
 from typing import Optional
 from PySide6.QtCore import Qt, QRectF, QSize, QPointF
 from PySide6.QtGui import QColor, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import QCheckBox, QFrame, QLabel, QPushButton, QVBoxLayout, QWidget
 from app.ui.qt.theme import SPACING, TOKENS
+
+def set_help(widget, text):
+    '''Hover explanation for a control. The <p> wrapper makes Qt word-wrap long text.'''
+    widget.setToolTip(f'<p>{html.escape(text)}</p>')
+
 
 class Card(QFrame):
     

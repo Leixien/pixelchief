@@ -28,6 +28,8 @@ REPEAT_PAUSE_MAX_DEFAULT = 0
 # An unattended loop that keeps failing must not spin: give up after this many
 # consecutive failed sessions.
 REPEAT_MAX_CONSECUTIVE_FAILURES = 3
+# Minimum loot a scouted base must hold before the bot attacks it; 0 = no minimum.
+MIN_LOOT_MAX = 9999999
 
 @dataclass
 class ProfileSettings:
@@ -39,6 +41,9 @@ class ProfileSettings:
     random_minutes_max: 'int' = RANDOM_MINUTES_MAX_DEFAULT
     repeat_pause_min: 'int' = REPEAT_PAUSE_MIN_DEFAULT
     repeat_pause_max: 'int' = REPEAT_PAUSE_MAX_DEFAULT
+    min_loot_gold: 'int' = 0
+    min_loot_elixir: 'int' = 0
+    min_loot_dark: 'int' = 0
 
 
 def get_settings_path():
@@ -84,6 +89,13 @@ def _normalize_reserve_builders(raw):
     return max(0, min(RESERVE_BUILDERS_MAX, value))
 
 
+def _normalize_min_loot(raw):
+    try:
+        return max(0, min(MIN_LOOT_MAX, int(raw)))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _normalize_random_range(min_raw, max_raw):
     '''``(min, max)`` clamped to 0..RANDOM_MINUTES_CAP, with max never below a live min.'''
     def clamp(raw):
@@ -121,7 +133,10 @@ def load_profile_settings():
             random_minutes_min = rand_min,
             random_minutes_max = rand_max,
             repeat_pause_min = pause_min,
-            repeat_pause_max = pause_max)
+            repeat_pause_max = pause_max,
+            min_loot_gold = _normalize_min_loot(raw.get('min_loot_gold', 0)),
+            min_loot_elixir = _normalize_min_loot(raw.get('min_loot_elixir', 0)),
+            min_loot_dark = _normalize_min_loot(raw.get('min_loot_dark', 0)))
     except (json.JSONDecodeError, OSError):
         return ProfileSettings()  # [recovered: decompiler turned this into `return None`, crashing every caller on a corrupt settings.json]
 
@@ -144,6 +159,9 @@ def save_profile_settings(settings):
         random_minutes_min = rand_min,
         random_minutes_max = rand_max,
         repeat_pause_min = pause_min,
-        repeat_pause_max = pause_max)
+        repeat_pause_max = pause_max,
+        min_loot_gold = _normalize_min_loot(getattr(settings, 'min_loot_gold', 0)),
+        min_loot_elixir = _normalize_min_loot(getattr(settings, 'min_loot_elixir', 0)),
+        min_loot_dark = _normalize_min_loot(getattr(settings, 'min_loot_dark', 0)))
     payload = asdict(normalized)
     path.write_text(json.dumps(payload, indent = 2), encoding = 'utf-8')

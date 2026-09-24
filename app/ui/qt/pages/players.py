@@ -4,7 +4,7 @@ from typing import List, Optional
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QScrollArea, QVBoxLayout, QWidget
 from app.ui.qt.theme import SPACING, TOKENS
-from app.ui.qt.widgets import PageTitle, chip_button, danger_button, neutral_button, primary_button
+from app.ui.qt.widgets import PageTitle, chip_button, danger_button, neutral_button, primary_button, set_help
 from app.utils.player_list_store import PlayerEntry, load_players, save_players
 
 class _PlayerRow(QWidget):
@@ -17,20 +17,25 @@ class _PlayerRow(QWidget):
         self._name = QLineEdit(entry.name)
         self._name.setPlaceholderText('Username (match in-game)')
         self._name.setMinimumWidth(240)
+        set_help(self._name, 'Account name exactly as shown in the game\'s Change user list: the bot finds it by reading the screen.')
         self._name.editingFinished.connect(on_change)
         layout.addWidget(self._name, stretch = 1)
         self._enabled = entry.enabled
         self._mode_btn = primary_button('Run', parent = self) if entry.enabled else danger_button('Skip', parent = self)
         self._mode_btn.clicked.connect(self._toggle_mode)
+        set_help(self._mode_btn, 'Run: Multi-run farms this account. Skip: left out. Click to switch.')
         layout.addWidget(self._mode_btn)
         up = chip_button('▲', parent = self)
         up.clicked.connect(on_move_up)
+        set_help(up, 'Move up: earlier in the rotation.')
         layout.addWidget(up)
         down = chip_button('▼', parent = self)
         down.clicked.connect(on_move_down)
+        set_help(down, 'Move down: later in the rotation.')
         layout.addWidget(down)
         remove = danger_button('Remove', parent = self)
         remove.clicked.connect(on_remove)
+        set_help(remove, 'Delete this account from the list.')
         layout.addWidget(remove)
 
     
@@ -48,6 +53,7 @@ class _PlayerRow(QWidget):
         old.deleteLater()
         self._mode_btn = primary_button('Run', parent = self) if self._enabled else danger_button('Skip', parent = self)
         self._mode_btn.clicked.connect(self._toggle_mode)
+        set_help(self._mode_btn, 'Run: Multi-run farms this account. Skip: left out. Click to switch.')
         layout.insertWidget(idx, self._mode_btn)
 
     
@@ -87,6 +93,7 @@ class PlayersPage(QWidget):
         scroll.setWidget(self._list_host)
         outer.addWidget(scroll, stretch = 1)
         add_btn = neutral_button('Add player')
+        set_help(add_btn, 'Add an empty row for another account.')
         add_btn.clicked.connect((lambda : self._add_row(PlayerEntry(name = '', enabled = True))))
         outer.addWidget(add_btn)
 

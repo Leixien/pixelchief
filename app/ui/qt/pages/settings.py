@@ -10,9 +10,9 @@ from app.services.display import DisplayService
 from app.services.adb import adb_options
 from app.services.window import DescendantInfo, WindowCandidate, WindowService
 from app.ui.qt.theme import SPACING, TOKENS
-from app.ui.qt.widgets import Card, PageTitle, SectionTitle, neutral_button, primary_button
+from app.ui.qt.widgets import Card, PageTitle, SectionTitle, neutral_button, primary_button, set_help
 from app.utils.logger import setup_logger
-from app.utils.profile_settings_store import EARTHQUAKE_METHOD_OPTIONS, RANDOM_MINUTES_CAP, RESERVE_BUILDERS_MAX, WALL_UPGRADE_THRESHOLD_M_MAX, ProfileSettings, load_profile_settings, save_profile_settings
+from app.utils.profile_settings_store import EARTHQUAKE_METHOD_OPTIONS, MIN_LOOT_MAX, RANDOM_MINUTES_CAP, RESERVE_BUILDERS_MAX, WALL_UPGRADE_THRESHOLD_M_MAX, ProfileSettings, load_profile_settings, save_profile_settings
 from app.utils.window_settings_store import clear_window_selection, load_window_selection, save_window_selection
 logger = setup_logger('SettingsPage')
 
@@ -95,7 +95,29 @@ class SettingsPage(QWidget):
         card.card_layout.addWidget(SectionTitle('Earthquake placement'))
         self._earthquake = QComboBox()
         self._earthquake.addItems(list(EARTHQUAKE_METHOD_OPTIONS))
+        set_help(self._earthquake, 'Where the 11 Earthquake spells land. Curve Placement: along an arc across the top of the base. Random Placement: random points inside the base.')
         card.card_layout.addWidget(self._earthquake)
+        card.card_layout.addWidget(SectionTitle('Minimum loot to attack'))
+        min_loot_hint = QLabel('Press Next on scouted bases until one holds at least this much of every resource. 0 = no minimum for that resource. Each Next costs gold; after 30 skips the bot attacks anyway. 16:9 only for now.')
+        min_loot_hint.setWordWrap(True)
+        min_loot_hint.setStyleSheet(f'''color: {TOKENS['text_muted']};''')
+        card.card_layout.addWidget(min_loot_hint)
+        min_loot_row = QHBoxLayout()
+        self._min_loot = []
+        for label, step in (('gold', 50000), ('elixir', 50000), ('dark', 1000)):
+            spin = QSpinBox()
+            spin.setRange(0, MIN_LOOT_MAX)
+            spin.setSingleStep(step)
+            spin.setGroupSeparatorShown(True)
+            spin.setFixedWidth(110)
+            set_help(spin, f'Minimum {label} a base must hold before the bot attacks it. 0 = no minimum.')
+            min_loot_row.addWidget(spin)
+            unit = QLabel(label)
+            unit.setStyleSheet(f'''color: {TOKENS['text_muted']};''')
+            min_loot_row.addWidget(unit)
+            self._min_loot.append(spin)
+        min_loot_row.addStretch()
+        card.card_layout.addLayout(min_loot_row)
         card.card_layout.addWidget(SectionTitle('Wall upgrade threshold'))
         wall_hint = QLabel('With "Upgrade walls" on, upgrade as soon as gold or elixir reaches this amount — before storages fill up and raids stop earning. 0 = only upgrade when storages are full.')
         wall_hint.setWordWrap(True)
@@ -106,6 +128,7 @@ class SettingsPage(QWidget):
         self._wall_threshold.setRange(0, WALL_UPGRADE_THRESHOLD_M_MAX)
         self._wall_threshold.setSuffix('M')
         self._wall_threshold.setFixedWidth(88)
+        set_help(self._wall_threshold, 'Millions of gold or elixir that trigger wall upgrades. 0 = only when storages are full.')
         wall_row.addWidget(self._wall_threshold)
         wall_unit = QLabel('gold or elixir')
         wall_unit.setStyleSheet(f'''color: {TOKENS['text_muted']};''')
@@ -119,6 +142,7 @@ class SettingsPage(QWidget):
         card.card_layout.addWidget(order_hint)
         self._upgrade_order = QComboBox()
         self._upgrade_order.addItems(['Priciest first', 'Cheapest first'])
+        set_help(self._upgrade_order, 'Priciest first: big upgrades, fewer builders busy. Cheapest first: more upgrades at once.')
         card.card_layout.addWidget(self._upgrade_order)
         card.card_layout.addWidget(SectionTitle('Reserve builders'))
         reserve_hint = QLabel('With Auto upgrade on, keep this many builders free (the wall flow spends through them). Set 0 when your walls are maxed so every builder is used for upgrades.')
@@ -129,6 +153,7 @@ class SettingsPage(QWidget):
         self._reserve_builders = QSpinBox()
         self._reserve_builders.setRange(0, RESERVE_BUILDERS_MAX)
         self._reserve_builders.setFixedWidth(88)
+        set_help(self._reserve_builders, 'Builders Auto upgrade leaves free (0-5). Use 0 if your walls are maxed.')
         reserve_row.addWidget(self._reserve_builders)
         reserve_unit = QLabel('builders kept free')
         reserve_unit.setStyleSheet(f'''color: {TOKENS['text_muted']};''')
@@ -151,6 +176,8 @@ class SettingsPage(QWidget):
         self._random_max = QSpinBox()
         self._random_max.setRange(0, RANDOM_MINUTES_CAP)
         self._random_max.setFixedWidth(88)
+        set_help(self._random_min, 'Shortest random session, in minutes. 0 = off, use the Run page duration.')
+        set_help(self._random_max, 'Longest random session, in minutes.')
         random_row.addWidget(self._random_max)
         random_unit = QLabel('minutes per session')
         random_unit.setStyleSheet(f'''color: {TOKENS['text_muted']};''')
@@ -173,6 +200,8 @@ class SettingsPage(QWidget):
         self._repeat_max = QSpinBox()
         self._repeat_max.setRange(0, RANDOM_MINUTES_CAP)
         self._repeat_max.setFixedWidth(88)
+        set_help(self._repeat_min, 'Shortest pause before the next session, in minutes. 0 = off, run one session only.')
+        set_help(self._repeat_max, 'Longest pause before the next session, in minutes.')
         repeat_row.addWidget(self._repeat_max)
         repeat_unit = QLabel('minutes of pause between sessions')
         repeat_unit.setStyleSheet(f'''color: {TOKENS['text_muted']};''')
@@ -182,9 +211,11 @@ class SettingsPage(QWidget):
         btn_row = QHBoxLayout()
         self._btn_save = primary_button('Save', parent = card)
         self._btn_save.clicked.connect(self._on_save)
+        set_help(self._btn_save, 'Save the settings on this card. They apply from the next session.')
         btn_row.addWidget(self._btn_save)
         self._btn_reset = neutral_button('Reset', parent = card)
         self._btn_reset.clicked.connect(self._reload_earthquake)
+        set_help(self._btn_reset, 'Discard unsaved changes and show the saved settings again.')
         btn_row.addWidget(self._btn_reset)
         btn_row.addStretch()
         card.card_layout.addLayout(btn_row)
@@ -204,6 +235,7 @@ class SettingsPage(QWidget):
         card.card_layout.addWidget(self._adb_status)
         self._adb_test = neutral_button('Test capture', parent=card)
         self._adb_test.clicked.connect(self._test_adb)
+        set_help(self._adb_test, 'Take one screenshot from the Android device to check the connection. Sends no input.')
         card.card_layout.addWidget(self._adb_test)
         return card
 
@@ -249,19 +281,24 @@ class SettingsPage(QWidget):
         row = QHBoxLayout()
         self._btn_refresh = neutral_button('Refresh', parent = card)
         self._btn_refresh.clicked.connect(self._refresh_windows)
+        set_help(self._btn_refresh, 'Reload the list of open windows.')
         row.addWidget(self._btn_refresh)
         self._btn_test = neutral_button('Test', parent = card)
         self._btn_test.clicked.connect(self._on_test_window)
+        set_help(self._btn_test, 'Check that the selected window is the game and show its size, to confirm it renders at 16:9 or 16:10.')
         row.addWidget(self._btn_test)
         self._btn_info = neutral_button('Info', parent = card)
         self._btn_info.clicked.connect(self._on_window_info)
+        set_help(self._btn_info, 'Show the technical details of the selected window, for troubleshooting.')
         row.addWidget(self._btn_info)
         self._btn_use = primary_button('Use this window', parent = card)
         self._btn_use.clicked.connect(self._on_use_window)
+        set_help(self._btn_use, 'Remember the selected window as the game window.')
         row.addWidget(self._btn_use)
         row.addStretch()
         self._btn_auto = neutral_button('Auto-detect', parent = card)
         self._btn_auto.clicked.connect(self._on_auto_detect)
+        set_help(self._btn_auto, 'Forget the chosen window and let the bot find Clash of Clans by itself.')
         row.addWidget(self._btn_auto)
         card.card_layout.addLayout(row)
         disp_hint = QLabel("Ultrawide / 21:9 monitor? Google Play Games locks the game to your display's aspect at launch, so it renders 21:9 (unsupported). Fix: click below to switch to 16:9, FULLY close and reopen Clash, then restore your display — the running game stays 16:9.")
@@ -271,9 +308,11 @@ class SettingsPage(QWidget):
         disp_row = QHBoxLayout()
         self._btn_disp_169 = neutral_button('Switch display to 16:9', parent = card)
         self._btn_disp_169.clicked.connect(self._on_switch_display_169)
+        set_help(self._btn_disp_169, 'Ultrawide monitors: set the display to a 16:9 resolution so the game starts at 16:9. Then fully close and reopen Clash.')
         disp_row.addWidget(self._btn_disp_169)
         self._btn_disp_restore = neutral_button('Restore my display', parent = card)
         self._btn_disp_restore.clicked.connect(self._on_restore_display)
+        set_help(self._btn_disp_restore, 'Put your normal display resolution back. The running game stays 16:9.')
         disp_row.addWidget(self._btn_disp_restore)
         disp_row.addStretch()
         card.card_layout.addLayout(disp_row)
@@ -293,6 +332,8 @@ class SettingsPage(QWidget):
             self._earthquake.setCurrentIndex(idx)
         self._wall_threshold.setValue(settings.wall_upgrade_threshold_m)
         self._reserve_builders.setValue(settings.reserve_builders)
+        for spin, value in zip(self._min_loot, (settings.min_loot_gold, settings.min_loot_elixir, settings.min_loot_dark)):
+            spin.setValue(value)
         self._random_min.setValue(settings.random_minutes_min)
         self._random_max.setValue(settings.random_minutes_max)
         self._repeat_min.setValue(settings.repeat_pause_min)
@@ -301,7 +342,7 @@ class SettingsPage(QWidget):
 
 
     def _on_save(self):
-        save_profile_settings(ProfileSettings(earthquake_method = self._earthquake.currentText(), wall_upgrade_threshold_m = self._wall_threshold.value(), reserve_builders = self._reserve_builders.value(), upgrade_order = 'cheapest' if self._upgrade_order.currentIndex() == 1 else 'priciest', random_minutes_min = self._random_min.value(), random_minutes_max = self._random_max.value(), repeat_pause_min = self._repeat_min.value(), repeat_pause_max = self._repeat_max.value()))
+        save_profile_settings(ProfileSettings(earthquake_method = self._earthquake.currentText(), wall_upgrade_threshold_m = self._wall_threshold.value(), reserve_builders = self._reserve_builders.value(), upgrade_order = 'cheapest' if self._upgrade_order.currentIndex() == 1 else 'priciest', random_minutes_min = self._random_min.value(), random_minutes_max = self._random_max.value(), repeat_pause_min = self._repeat_min.value(), repeat_pause_max = self._repeat_max.value(), min_loot_gold = self._min_loot[0].value(), min_loot_elixir = self._min_loot[1].value(), min_loot_dark = self._min_loot[2].value()))
         # save clamps max up to min; mirror that back so the UI never shows a range the bot will not use
         saved = load_profile_settings()
         self._random_min.setValue(saved.random_minutes_min)

@@ -2082,6 +2082,36 @@ fewer than three numeric clusters are available.
 
 
         @staticmethod
+        def read_enemy_loot(screen_img, roi):
+            '''
+Scouted base's *Available Loot* as ``(gold, elixir, dark)``. ``roi`` ``(x, y, w, h)`` covers
+the three number rows (gold, elixir, dark top to bottom) right of their icons; each third is
+read on its own with ``--psm 7``. An empty dark row is 0 (bases below TH7 have none).
+Returns ``None`` when gold or elixir cannot be read.
+'''
+            if screen_img is None or screen_img.size == 0 or pytesseract is None:
+                return None
+            (x, y, w, h) = (int(v) for v in roi)
+            values = []
+            for i in range(3):
+                band = screen_img[y + i * h // 3:y + (i + 1) * h // 3, x:x + w]
+                if band.size == 0:
+                    return None
+                band = cv2.resize(band, None, fx = 3, fy = 3, interpolation = cv2.INTER_CUBIC)
+                mono = VisionService.preprocess_bw_ui_text(band, white_text = True)
+                mono = cv2.copyMakeBorder(mono, 20, 20, 20, 20, cv2.BORDER_CONSTANT, value = 255)
+                try:
+                    raw = pytesseract.image_to_string(mono, config = '--psm 7 -c tessedit_char_whitelist=0123456789')
+                except pytesseract.TesseractNotFoundError:
+                    VisionService._log_tesseract_missing()
+                    return None
+                values.append(VisionService.parse_loot_amount_from_grouped_text(raw))
+            if values[0] is None or values[1] is None:
+                return None
+            return (values[0], values[1], values[2] or 0)
+
+
+        @staticmethod
         def _ocr_confidence_key(w):
             if math.isnan(w.confidence):
                 return -1

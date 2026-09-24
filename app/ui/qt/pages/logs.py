@@ -8,7 +8,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtGui import QFont, QTextCursor
 from PySide6.QtWidgets import QHBoxLayout, QPlainTextEdit, QVBoxLayout, QWidget
 from app.ui.qt.theme import SPACING
-from app.ui.qt.widgets import PageTitle, neutral_button
+from app.ui.qt.widgets import PageTitle, neutral_button, set_help
 from app.utils.common import get_autoloot_log_path
 
 class LogsPage(QWidget):
@@ -26,9 +26,11 @@ class LogsPage(QWidget):
         btn_row = QHBoxLayout()
         open_btn = neutral_button('Open in Explorer')
         open_btn.clicked.connect(self._open_in_explorer)
+        set_help(open_btn, 'Open the folder with the full log file, to attach to a bug report.')
         btn_row.addWidget(open_btn)
         clear_btn = neutral_button('Clear view')
         clear_btn.clicked.connect(self._clear_view)
+        set_help(clear_btn, 'Empty this view. The log file on disk is kept.')
         btn_row.addWidget(clear_btn)
         btn_row.addStretch()
         layout.addLayout(btn_row)

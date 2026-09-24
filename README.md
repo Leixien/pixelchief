@@ -33,6 +33,11 @@ Minions, or Edrags), collects loot, returns home, and recovers on its own from p
 disconnects, and stray screens. Builder Base farming included. See
 [Army setup](#army-setup) for what to bring.
 
+**Minimum loot.** *Settings → Minimum loot to attack* sets a separate minimum for gold, elixir
+and dark elixir (0 = ignored). BasePilot reads each scouted base's *Available Loot* and presses
+**Next** until one meets every minimum; after 30 skips, or on an unreadable screen, it attacks
+the base in front of it. 16:9 only for now (`enemy_loot` / `next_button` in `data.json`).
+
 **Auto upgrade (beta).** Reads the builder menu with OCR and spends your loot:
 
 - **Maxer** — starts an affordable upgrade and never touches your Town Hall. Priciest

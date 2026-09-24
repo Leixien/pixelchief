@@ -57,6 +57,11 @@ _IDLE_RECHECK_SECONDS = 300  # while idling (storages full, nothing startable): 
 # past the ≥0 filter (live repro: "+15.5M elixir" in one battle).
 _LOOT_DELTA_MAX_MAIN = 3000000
 _LOOT_DELTA_MAX_DARK = 50000
+# ponytail: fixed cap on Next presses per match (each one costs gold); raise it if a
+# high minimum keeps hitting the cap.
+_MAX_BASE_SKIPS = 30
+_NEXT_SETTLE_SECONDS = 1.5  # after Next the old base stays on screen briefly before the clouds
+_NEXT_WAIT_TIMEOUT = 20
 _WALL_MENU_SCROLL_BASELINE: dict[str, tuple[int, int]] = {
     ASPECT_16_9: (1305, 605),
     ASPECT_16_10: (1305, 672) }
@@ -85,7 +90,7 @@ class Bot:
         self._home_trace_seq = 0
 
     
-    def start(self, method, run_time_minutes, star_bonus = False, status_callback = None, loot_callback = None, multi_run_players = None, ranked_fill = False, upgrade_walls = False, earthquake_method = EARTHQUAKE_METHOD_CURVE, builder_base = False, loot_prioritise = 'both', wall_upgrade_threshold = 0, auto_upgrade = MODE_OFF, reserve_builders = 1, state_callback = None, upgrade_order = None):
+    def start(self, method, run_time_minutes, star_bonus = False, status_callback = None, loot_callback = None, multi_run_players = None, ranked_fill = False, upgrade_walls = False, earthquake_method = EARTHQUAKE_METHOD_CURVE, builder_base = False, loot_prioritise = 'both', wall_upgrade_threshold = 0, auto_upgrade = MODE_OFF, reserve_builders = 1, state_callback = None, upgrade_order = None, min_loot = (0, 0, 0)):
         '''Starts the bot loop. With ``multi_run_players``, runs a full session per enabled player.
         ``run_time_minutes <= 0`` (single Home Village runs only) means UNLIMITED — farm,
         upgrade and idle until the user stops the bot ("run until maxed").'''
@@ -120,8 +125,9 @@ class Bot:
             self._auto_upgrade_last_scan = 0
             self._reserve_builders = max(0, int(reserve_builders or 0))
             self._upgrade_order = upgrade_order
+            self._min_loot = tuple(max(0, int(v or 0)) for v in min_loot)
             self._advisor = None  # one UpgradeAdvisor per session (it holds execution cooldowns)
-            logger.info(f'''Bot started. Method: {method}, Time: {'unlimited' if unlimited else f'{run_time_minutes}m'}, StarBonus: {star_bonus}, MultiRun: {mr}, RankedFill: {ranked_fill}, UpgradeWalls: {upgrade_walls}, WallThreshold: {self._wall_upgrade_threshold}, AutoUpgrade: {self._auto_upgrade_mode}, ReserveBuilders: {self._reserve_builders}, Earthquake: {earthquake_method}, BuilderBase: {builder_base}, LootPrioritise: {loot_prioritise}''')
+            logger.info(f'''Bot started. Method: {method}, Time: {'unlimited' if unlimited else f'{run_time_minutes}m'}, StarBonus: {star_bonus}, MultiRun: {mr}, RankedFill: {ranked_fill}, UpgradeWalls: {upgrade_walls}, WallThreshold: {self._wall_upgrade_threshold}, AutoUpgrade: {self._auto_upgrade_mode}, ReserveBuilders: {self._reserve_builders}, Earthquake: {earthquake_method}, BuilderBase: {builder_base}, LootPrioritise: {loot_prioritise}, MinLoot: {self._min_loot}''')
         except Exception:
             if adb is not None:
                 adb.restore_display()
@@ -1610,6 +1616,8 @@ deselect, which would eat the upcoming Attack click.'''
         if self.window.use_adb and battle_x is None:
             logger.warning('ADB deployment cancelled: battle screen not confirmed')
             return None
+        if not ranked_fill:
+            self._skip_poor_bases()
         frame = self.window.screenshot()
         if frame is None:
             return None
@@ -1637,6 +1645,74 @@ deselect, which would eat the upcoming Attack click.'''
         return 'troop' if result is False else None
 
     
+    def _config_rect(self, key, frame):
+        '''``[x, y, w, h]`` from data.json scaled to ``frame``, or None when the aspect lacks it.'''
+        rect = self.config.data.get(key)
+        if not rect or len(rect) != 4:
+            return None
+        size = (frame.shape[1], frame.shape[0])
+        return (*self.config.scale_point(rect[:2], size), *self.config.scale_point(rect[2:], size))
+
+
+    def _find_next_button(self, frame, region):
+        if frame is None:
+            return None
+        words = self.vision.find_words_ocr(frame, region = region, query = 'next', white_text = True)
+        return words[0].center if words else None
+
+
+    def _skip_poor_bases(self):
+        '''Press Next until the scouted base holds the minimum loot set per resource
+        (0 = ignored). Anything unreadable attacks the current base: a wrong read must never
+        spin the search on its own.'''
+        mins = getattr(self, '_min_loot', (0, 0, 0))
+        if not any(mins):
+            return None
+        cb = getattr(self, '_status_callback', None)
+        for skips in range(_MAX_BASE_SKIPS + 1):
+            self._check_stop()
+            frame = self.window.screenshot()
+            if frame is None:
+                return None
+            loot_roi = self._config_rect('enemy_loot', frame)
+            next_region = self._config_rect('next_button', frame)
+            if loot_roi is None or next_region is None:
+                logger.warning('Min loot: no enemy_loot/next_button in data.json for %s — attacking every base', self.config.aspect_key)
+                return None
+            loot = self.vision.read_enemy_loot(frame, loot_roi)
+            if loot is None:
+                logger.warning('Min loot: enemy loot unreadable — attacking this base')
+                return None
+            if all(have >= need for have, need in zip(loot, mins)):
+                logger.info('Min loot: base accepted after %d skip(s): gold=%d elixir=%d dark=%d', skips, *loot)
+                return None
+            if skips == _MAX_BASE_SKIPS:
+                msg = f'Min loot: no base met the minimum in {_MAX_BASE_SKIPS} skips — attacking this one'
+                logger.warning(msg)
+                if cb:
+                    cb(msg)
+                return None
+            pt = self._find_next_button(frame, next_region)
+            if pt is None:
+                logger.warning('Min loot: Next button not found — attacking this base')
+                return None
+            logger.info('Min loot: skipping base gold=%d elixir=%d dark=%d (min %d/%d/%d)', *loot, *mins)
+            if cb:
+                cb(f'Skipping base ({skips + 1}/{_MAX_BASE_SKIPS}): {loot[0]:,} gold, {loot[1]:,} elixir, {loot[2]:,} dark')
+            self.input.click(*pt, pause = 0.1)
+            if self.stop_event.wait(_NEXT_SETTLE_SECONDS):
+                return None
+            deadline = time.time() + _NEXT_WAIT_TIMEOUT
+            while self._find_next_button(self.window.screenshot(), next_region) is None:
+                self._check_stop()
+                if time.time() > deadline:
+                    logger.warning('Min loot: next base did not load in %ds — attacking whatever is on screen', _NEXT_WAIT_TIMEOUT)
+                    return None
+                if self.stop_event.wait(0.5):
+                    return None
+        return None
+
+
     def _get_strategy(self, method_id):
         cb = getattr(self, '_status_callback', None)
         eq = getattr(self, '_earthquake_method', EARTHQUAKE_METHOD_CURVE)
