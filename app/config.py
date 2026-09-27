@@ -67,8 +67,8 @@ def check_game_window_aspect_for_start(parent = None, on_configure = None):
     """
 Validate the Clash window before farming starts.
 
-If the window is missing or its outer size is not roughly 16:9 or 16:10, show an error
-and return False. If probing the window fails unexpectedly, log and return True so the
+A window that is not 16:9 is first resized to 16:9. If the window is missing or its size is
+still not roughly 16:9 or 16:10, show an error and return False. If probing the window fails unexpectedly, log and return True so the
 bot can still try (matches the old startup skip behavior).
 
 ``parent`` is passed to ``QMessageBox`` when available (e.g. main Qt window). ``on_configure``
@@ -85,12 +85,19 @@ is an optional callback used by the window-not-found dialog's 'Open configuratio
         _show_window_not_found_dialog(parent, on_configure)
         return False
     (w, h) = size
+    if resolve_aspect_key(w, h) != ASPECT_16_9:
+        # Most users "fix" the aspect by changing the display resolution; resizing the
+        # window does the job and leaves the desktop alone.
+        (ok, resized, reason) = ws.resize_to_16_9()
+        logger.info(f'''Game window {w}x{h}: resize to 16:9 -> ok={ok} size={resized} reason={reason}''')
+        if resized:
+            (w, h) = resized
     if not resolve_aspect_key(w, h) is None:
         return True
     
     try:
         from PySide6.QtWidgets import QMessageBox
-        msg = 'Aspect ratio not supported (resize the game window to ~16:9 or ~16:10).'
+        msg = 'Aspect ratio not supported and the game window could not be resized to 16:9. Exit full screen in Google Play Games (F11), then press Start again.'
         QMessageBox.critical(parent, 'BasePilot', msg)
         
         try:

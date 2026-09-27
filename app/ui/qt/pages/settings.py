@@ -301,11 +301,15 @@ class SettingsPage(QWidget):
         set_help(self._btn_auto, 'Forget the chosen window and let the bot find Clash of Clans by itself.')
         row.addWidget(self._btn_auto)
         card.card_layout.addLayout(row)
-        disp_hint = QLabel("Ultrawide / 21:9 monitor? Google Play Games locks the game to your display's aspect at launch, so it renders 21:9 (unsupported). Fix: click below to switch to 16:9, FULLY close and reopen Clash, then restore your display — the running game stays 16:9.")
+        disp_hint = QLabel("Game not 16:9? Click Resize game window to 16:9 (Start also does it by itself). Only if that fails, e.g. on an ultrawide / 21:9 monitor: Google Play Games locks the game to your display's aspect at launch, so it renders 21:9 (unsupported). Fix: click below to switch to 16:9, FULLY close and reopen Clash, then restore your display — the running game stays 16:9.")
         disp_hint.setWordWrap(True)
         disp_hint.setStyleSheet(f'''color: {TOKENS['text_muted']};''')
         card.card_layout.addWidget(disp_hint)
         disp_row = QHBoxLayout()
+        self._btn_resize_169 = primary_button('Resize game window to 16:9', parent = card)
+        self._btn_resize_169.clicked.connect(self._on_resize_window_169)
+        set_help(self._btn_resize_169, 'Resize the Clash of Clans window so the game is 16:9, as big as your screen allows. Start does this by itself. No need to change the display resolution.')
+        disp_row.addWidget(self._btn_resize_169)
         self._btn_disp_169 = neutral_button('Switch display to 16:9', parent = card)
         self._btn_disp_169.clicked.connect(self._on_switch_display_169)
         set_help(self._btn_disp_169, 'Ultrawide monitors: set the display to a 16:9 resolution so the game starts at 16:9. Then fully close and reopen Clash.')
@@ -467,6 +471,23 @@ class SettingsPage(QWidget):
         del exc
 
     
+    def _on_resize_window_169(self):
+        ws = WindowService()
+        cand = self._selected_candidate()
+        if cand is not None and cand.is_game:
+            ws.hwnd = cand.child_hwnd
+        (ok, size, reason) = ws.resize_to_16_9()
+        text = {
+            'ok': f'Game window resized: game is now {size[0]}x{size[1]} (16:9).' if size else '',
+            'already_16_9': f'The game is already 16:9 ({size[0]}x{size[1]}).' if size else '',
+            'adb': 'Android device (ADB): nothing to resize.',
+            'not_found': 'Game window not found. Open Clash of Clans in Google Play Games, then Refresh.',
+            'fullscreen': 'The game is in full screen. Press F11 in Google Play Games to leave full screen, then try again.',
+            'not_16_9_after_resize': f'Window resized, but the game still renders {size[0]}x{size[1]}. Fully close and reopen Clash, or use Switch display to 16:9 below.' if size else ''}[reason]
+        self._window_status.setText(text)
+        self._flash_status_bar('Game window is 16:9' if ok else 'Resize failed')
+
+
     def _on_switch_display_169(self):
         (ok, size, reason) = self._display.switch_to_16_9()
         if ok and reason == 'already_16_9':

@@ -1,4 +1,5 @@
 import ctypes
+import time
 from ctypes import wintypes
 from dataclasses import dataclass
 import numpy as np
@@ -16,6 +17,33 @@ MK_LBUTTON = 1
 WM_MOUSEWHEEL = 522
 WHEEL_DELTA = 120
 _CHILD_CLASS_PREFIX = 'CROSVM'
+_SWP_NOZORDER = 0x4
+_SWP_NOACTIVATE = 0x10
+_SW_RESTORE = 9
+_GA_ROOT = 2
+_MONITOR_DEFAULTTONEAREST = 2
+_RESIZE_ATTEMPTS = 3  # the surface can settle a few px off (title bar, DPI rounding): re-measure and correct
+_RESIZE_SETTLE_SECONDS = 0.6
+
+
+class _MONITORINFO(ctypes.Structure):
+    _fields_ = [('cbSize', wintypes.DWORD), ('rcMonitor', wintypes.RECT), ('rcWork', wintypes.RECT), ('dwFlags', wintypes.DWORD)]
+
+
+def fit_16_9(surface, outer, work):
+    '''Outer window rect ``(x, y, w, h)`` whose game surface is the largest 16:9 that fits
+    ``work`` (``(left, top, right, bottom)``). ``surface`` is ``(w, h)``, ``outer`` is
+    ``(left, top, right, bottom)``; the difference between them is the window chrome
+    (title bar, borders), which stays the same size after the resize.'''
+    (dw, dh) = (outer[2] - outer[0] - surface[0], outer[3] - outer[1] - surface[1])
+    (work_w, work_h) = (work[2] - work[0], work[3] - work[1])
+    w = int(min(work_w - dw, (work_h - dh) * 16 / 9))
+    h = round(w * 9 / 16)
+    (ow, oh) = (w + dw, h + dh)
+    x = max(work[0], min(outer[0], work[2] - ow))
+    y = max(work[1], min(outer[1], work[3] - oh))
+    return (x, y, ow, oh)
+
 
 @dataclass
 class WindowCandidate:
@@ -246,6 +274,51 @@ fails. Candidates with a CROSVM surface are sorted first.
             return (int(w), int(h))
         except Exception:
             return None
+
+
+    def resize_to_16_9(self):
+        '''Resize the game's top-level window so its capture surface is 16:9, as large as the
+monitor's work area allows. Returns ``(ok, (w, h) | None, reason)``; reason is ``ok``,
+``already_16_9``, ``adb``, ``not_found``, ``fullscreen`` or ``not_16_9_after_resize``.'''
+        from app.config import ASPECT_16_9, resolve_aspect_key
+        if self.use_adb:
+            return (False, None, 'adb')
+        if not self.hwnd:
+            self.find_window()
+        surface = self.window_pixel_size(self.hwnd)
+        if surface is None:
+            return (False, None, 'not_found')
+        if resolve_aspect_key(*surface) == ASPECT_16_9:
+            return (True, surface, 'already_16_9')
+        top = self.user32.GetAncestor(self.hwnd, _GA_ROOT) or self.hwnd
+        info = _MONITORINFO()
+        info.cbSize = ctypes.sizeof(_MONITORINFO)
+        self.user32.GetMonitorInfoW(self.user32.MonitorFromWindow(top, _MONITOR_DEFAULTTONEAREST), ctypes.byref(info))
+        work = (info.rcWork.left, info.rcWork.top, info.rcWork.right, info.rcWork.bottom)
+        mon = info.rcMonitor
+        if self.user32.IsZoomed(top):
+            self.user32.ShowWindow(top, _SW_RESTORE)
+            time.sleep(_RESIZE_SETTLE_SECONDS)
+        for attempt in range(_RESIZE_ATTEMPTS):
+            rect = wintypes.RECT()
+            self.user32.GetWindowRect(top, ctypes.byref(rect))
+            outer = (rect.left, rect.top, rect.right, rect.bottom)
+            if attempt == 0 and outer == (mon.left, mon.top, mon.right, mon.bottom):
+                # Borderless fullscreen: no chrome to measure and SetWindowPos is ignored.
+                return (False, surface, 'fullscreen')
+            (x, y, w, h) = fit_16_9(surface, outer, work)
+            logger.info('Resize to 16:9: surface %dx%d, window -> %dx%d at (%d,%d)', surface[0], surface[1], w, h, x, y)
+            self.user32.SetWindowPos(top, 0, x, y, w, h, _SWP_NOZORDER | _SWP_NOACTIVATE)
+            time.sleep(_RESIZE_SETTLE_SECONDS)
+            surface = self.window_pixel_size(self.hwnd)
+            if surface is None:
+                return (False, None, 'not_found')
+            if abs(surface[0] / surface[1] - 16 / 9) < 0.005:
+                break
+        if resolve_aspect_key(*surface) != ASPECT_16_9:
+            logger.warning('Resize to 16:9: surface is %dx%d after resizing — the game keeps its own aspect', *surface)
+            return (False, surface, 'not_16_9_after_resize')
+        return (True, surface, 'ok')
 
 
     def _resolve_hwnd(self, selection):

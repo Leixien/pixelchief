@@ -68,6 +68,24 @@ class MinLootTests(unittest.TestCase):
         assert len(clicks) == 2
 
 
+class ResizeTo16x9Tests(unittest.TestCase):
+
+    def test_fits_largest_16_9_surface_in_work_area(self):
+        from app.services.window import fit_16_9
+        work = (0, 0, 1920, 1040)  # 1080p minus taskbar
+        # 1500x1000 surface under a 32 px title bar and 1 px borders.
+        (x, y, w, h) = fit_16_9((1500, 1000), (100, 20, 1602, 1053), work)
+        (sw, sh) = (w - 2, h - 33)
+        assert abs(sw / sh - 16 / 9) < 0.005, (sw, sh)
+        assert x >= 0 and y >= 0 and x + w <= 1920 and y + h <= 1040, (x, y, w, h)
+        assert sh == 1040 - 33  # height is the limit on a wide screen
+
+    def test_keeps_window_on_its_monitor(self):
+        from app.services.window import fit_16_9
+        (x, y, w, h) = fit_16_9((800, 800), (3000, 500, 3800, 1300), (2560, 0, 5120, 1400))
+        assert 2560 <= x and x + w <= 5120 and 0 <= y and y + h <= 1400
+
+
 class RandomSessionLengthTests(unittest.TestCase):
 
     def test_range_normalization(self):

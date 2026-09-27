@@ -96,8 +96,12 @@ Automation that spends resources has to be careful, so BasePilot:
 - Clash of Clans running in **Google Play Games on PC** or on an ADB-connected Android device
 - The game rendering at **16:9** or 16:10
 
-**Ultrawide / 21:9 monitors:** Google Play Games locks the game's aspect ratio to your
-display resolution at launch. Use *Settings → Switch display to 16:9*, fully close and
+**Window size:** no need to change your display resolution. On Start, BasePilot resizes the
+Google Play Games window so the game is 16:9, as large as your screen allows (also available
+as *Settings → Resize game window to 16:9*). Leave full screen first (F11).
+
+**Ultrawide / 21:9 monitors:** if resizing is not enough (Google Play Games can lock the aspect to your
+display resolution at launch), use *Settings → Switch display to 16:9*, fully close and
 reopen Clash, then *Restore my display* — the running game keeps 16:9.
 
 ## Getting started
