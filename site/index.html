@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="it" data-layout="desktop">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BasePilot guida rapida</title>
+<meta name="description" content="Come installare e impostare BasePilot con Google Play Games o BlueStacks.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23E2A91B' stroke='%23A87A06' stroke-width='3'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@400;600;800&display=swap" rel="stylesheet">
+<script>
+  // Set the layout before first paint so the page never jumps. Desktop unless the reader picked mobile.
+  try { if (localStorage.getItem('layout') === 'mobile') document.documentElement.dataset.layout = 'mobile'; } catch (e) {}
+</script>
+<style>
+  :root {
+    --bg: #F7F3FB;
+    --surface: #FFFFFF;
+    --ink: #2B1D36;
+    --muted: #6B5A78;
+    --line: #D8CCE4;
+    --elixir: #8E3CC4;
+    --gold: #E2A91B;
+    --gold-ink: #3A2A00;
+    --display: 'Lilita One', 'Arial Rounded MT Bold', sans-serif;
+    --body: 'Nunito', system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1A1222; --surface: #251A30; --ink: #F1E9F7; --muted: #B8A6C7;
+      --line: #3E2F4D; --elixir: #C58BF0; --gold: #F0C04A;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 400 17px/1.6 var(--body);
+  }
+  a { color: var(--elixir); font-weight: 600; }
+  :focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; border-radius: 4px; }
+  h1, h2 { font-family: var(--display); font-weight: 400; line-height: 1.1; margin: 0; }
+  h2 { font-size: 1.9rem; margin-bottom: .6em; }
+  h3 { font-size: 1.05rem; margin: 1.4em 0 .4em; }
+  p, li { max-width: 68ch; }
+  strong { font-weight: 800; }
+  code, kbd { font: 600 .9em var(--body); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 0 .35em; }
+
+  /* Top bar: brand + layout switch */
+  .bar {
+    position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; padding: 10px 24px; background: var(--bg); border-bottom: 1px solid var(--line);
+  }
+  .brand { font-family: var(--display); font-size: 1.3rem; text-decoration: none; color: var(--ink); }
+  .switch { display: inline-flex; border: 2px solid var(--elixir); border-radius: 999px; padding: 2px; }
+  .switch button {
+    font: 800 .9rem var(--body); color: var(--elixir); background: none; border: 0;
+    padding: 6px 14px; border-radius: 999px; cursor: pointer; min-height: 36px;
+  }
+  .switch button[aria-pressed="true"] { background: var(--elixir); color: var(--surface); }
+
+  /* Hero */
+  .hero { padding: 56px 24px 40px; max-width: 1100px; margin: 0 auto; }
+  .hero h1 { font-size: clamp(3rem, 9vw, 6.5rem); letter-spacing: -.01em; }
+  .hero h1 span { display: block; font-size: .42em; color: var(--muted); margin-top: .2em; }
+  .hero p { font-size: 1.2rem; margin: 20px 0 28px; }
+  .cta {
+    display: inline-block; font: 800 1.05rem var(--body); text-decoration: none;
+    background: var(--gold); color: var(--gold-ink); padding: 14px 24px; border-radius: 14px;
+    box-shadow: 0 4px 0 #A87A06;
+  }
+  .cta:active { transform: translateY(3px); box-shadow: 0 1px 0 #A87A06; }
+  .version { margin-left: 14px; color: var(--muted); font-size: .95rem; }
+
+  /* Desktop layout: sticky index + reading column */
+  .layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; max-width: 1100px; margin: 0 auto; padding: 0 24px 80px; }
+  nav.toc { position: sticky; top: 76px; align-self: start; }
+  nav.toc ol { list-style: none; margin: 0; padding: 0; border-left: 2px solid var(--line); }
+  nav.toc a { display: block; padding: 6px 0 6px 14px; margin-left: -2px; border-left: 2px solid transparent; color: var(--muted); text-decoration: none; }
+  nav.toc a:hover, nav.toc a[aria-current="true"] { color: var(--ink); border-left-color: var(--elixir); }
+  section { padding: 12px 0 40px; scroll-margin-top: 70px; }
+  section + section { border-top: 1px solid var(--line); padding-top: 40px; }
+
+  /* Steps are a real sequence: gold coin numbers */
+  ol.steps { list-style: none; counter-reset: step; padding: 0; margin: 0; }
+  ol.steps > li { counter-increment: step; position: relative; padding: 4px 0 14px 52px; }
+  ol.steps > li::before {
+    content: counter(step); position: absolute; left: 0; top: 0; width: 36px; height: 36px;
+    display: grid; place-items: center; border-radius: 50%; font: 1.15rem var(--display);
+    background: var(--gold); color: var(--gold-ink); box-shadow: inset 0 -3px 0 #A87A06;
+  }
+  .where { color: var(--muted); font-weight: 800; margin: 1.2em 0 .6em; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  th { font-weight: 800; }
+  tr:last-child td { border-bottom: 0; }
+  .note { border-left: 4px solid var(--gold); padding: 4px 0 4px 16px; margin: 18px 0; }
+  ul.check { list-style: none; padding: 0; }
+  ul.check li { padding-left: 30px; position: relative; margin-bottom: 8px; }
+  ul.check li::before { content: ''; position: absolute; left: 0; top: .3em; width: 16px; height: 16px; border: 2px solid var(--elixir); border-radius: 4px; }
+  footer { max-width: 1100px; margin: 0 auto; padding: 24px; color: var(--muted); font-size: .9rem; border-top: 1px solid var(--line); }
+
+  /* Desktop layout on a narrow screen: drop the sidebar, keep the reading column */
+  @media (max-width: 820px) {
+    html[data-layout="desktop"] .layout { grid-template-columns: 1fr; }
+    html[data-layout="desktop"] nav.toc { display: none; }
+  }
+
+  /* Mobile-first layout: one narrow column at any width, chip index, tables as cards */
+  html[data-layout="mobile"] body { font-size: 18px; }
+  html[data-layout="mobile"] .bar { padding: 10px 16px; }
+  html[data-layout="mobile"] .hero { max-width: 480px; padding: 32px 16px 24px; }
+  html[data-layout="mobile"] .hero h1 { font-size: 3.4rem; }
+  html[data-layout="mobile"] .cta { display: block; text-align: center; }
+  html[data-layout="mobile"] .version { display: block; margin: 10px 0 0; text-align: center; }
+  html[data-layout="mobile"] .layout { display: block; max-width: 480px; padding: 0 16px 64px; }
+  html[data-layout="mobile"] nav.toc { position: sticky; top: 58px; z-index: 5; background: var(--bg); padding: 8px 0; margin: 0 -16px 8px; }
+  html[data-layout="mobile"] nav.toc ol { display: flex; gap: 8px; overflow-x: auto; border: 0; padding: 0 16px; scrollbar-width: none; }
+  html[data-layout="mobile"] nav.toc a {
+    white-space: nowrap; border: 2px solid var(--line); border-radius: 999px; padding: 8px 14px; margin: 0;
+    color: var(--ink); background: var(--surface); min-height: 44px; display: flex; align-items: center;
+  }
+  html[data-layout="mobile"] nav.toc a[aria-current="true"] { border-color: var(--elixir); color: var(--elixir); }
+  html[data-layout="mobile"] h2 { font-size: 1.7rem; }
+  html[data-layout="mobile"] section { scroll-margin-top: 130px; }
+  html[data-layout="mobile"] table, html[data-layout="mobile"] tbody, html[data-layout="mobile"] tr, html[data-layout="mobile"] td, html[data-layout="mobile"] th { display: block; width: 100%; }
+  html[data-layout="mobile"] table { border: 0; background: none; }
+  html[data-layout="mobile"] thead { display: none; }
+  html[data-layout="mobile"] tr { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; padding: 6px 0; }
+  html[data-layout="mobile"] td, html[data-layout="mobile"] th { border: 0; padding: 4px 14px; }
+  html[data-layout="mobile"] th[scope="row"] { font-family: var(--display); font-weight: 400; font-size: 1.15rem; }
+  html[data-layout="mobile"] td[data-label]::before { content: attr(data-label); display: block; font-weight: 800; font-size: .85rem; color: var(--muted); }
+  html[data-layout="mobile"] footer { max-width: 480px; padding: 24px 16px; }
+</style>
+</head>
+<body>
+<header class="bar">
+  <a class="brand" href="#top">BasePilot</a>
+  <div class="switch" role="group" aria-label="Layout della pagina">
+    <button type="button" data-set="desktop">Desktop</button>
+    <button type="button" data-set="mobile">Mobile</button>
+  </div>
+</header>
+
+<main id="top">
+  <div class="hero">
+    <h1>BasePilot<span>Guida rapida alla 1.0.9</span></h1>
+    <p>Il bot che farma Clash of Clans per te. Si imposta in 5 minuti, con Google Play Games o con BlueStacks.</p>
+    <a class="cta" href="https://github.com/Leixien/pixelchief/releases/latest">Scarica BasePilot.exe</a>
+    <span class="version">Per Windows 10 e 11, Tesseract incluso</span>
+  </div>
+
+  <div class="layout">
+    <nav class="toc" aria-label="Indice">
+      <ol>
+        <li><a href="#avvio">Scarica e avvia</a></li>
+        <li><a href="#scelta">Dove gira il gioco</a></li>
+        <li><a href="#gpg">Google Play Games</a></li>
+        <li><a href="#bluestacks">BlueStacks</a></li>
+        <li><a href="#novita">Altre novità</a></li>
+        <li><a href="#problemi">Problemi comuni</a></li>
+        <li><a href="#tester">Per i tester</a></li>
+      </ol>
+    </nav>
+
+    <div class="content">
+      <section id="avvio">
+        <h2>Scarica e avvia</h2>
+        <ol class="steps">
+          <li>Scarica <strong>BasePilot.exe</strong> dalla <a href="https://github.com/Leixien/pixelchief/releases/latest">pagina delle release</a>. Non serve installare altro.</li>
+          <li>Avvialo con doppio clic. Windows mostra un avviso blu perché l'exe non è firmato: clicca <strong>Ulteriori informazioni</strong>, poi <strong>Esegui comunque</strong>.</li>
+          <li>Passa il mouse su qualsiasi pulsante o interruttore: compare una spiegazione di cosa fa.</li>
+        </ol>
+      </section>
+
+      <section id="scelta">
+        <h2>Dove gira il gioco</h2>
+        <p>Vuoi usare il PC mentre il bot gioca? Scegli BlueStacks. Altrimenti resta su Google Play Games, che è il predefinito.</p>
+        <table>
+          <thead><tr><th scope="col"></th><th scope="col">Google Play Games</th><th scope="col">BlueStacks</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Finestra del gioco</th><td data-label="Google Play Games">Aperta, anche dietro altre finestre. Non ridotta a icona.</td><td data-label="BlueStacks">Anche piccola o dietro altre finestre</td></tr>
+            <tr><th scope="row">Mouse e tastiera</th><td data-label="Google Play Games">Liberi</td><td data-label="BlueStacks">Liberi</td></tr>
+            <tr><th scope="row">Velocità</th><td data-label="Google Play Games">Più veloce</td><td data-label="BlueStacks">Un po' più lento</td></tr>
+            <tr><th scope="row">Stato</th><td data-label="Google Play Games">Collaudato</td><td data-label="BlueStacks">Nuovo, in prova</td></tr>
+          </tbody>
+        </table>
+        <p class="note">La scelta si fa in <strong>Settings → Game runs in</strong>. Dopo averla cambiata, chiudi e riapri BasePilot.</p>
+      </section>
+
+      <section id="gpg">
+        <h2>Google Play Games</h2>
+        <p>Non serve più cambiare la risoluzione dello schermo: premendo Start, BasePilot porta da solo la finestra di Clash a 16:9, grande quanto lo schermo permette.</p>
+        <ol class="steps">
+          <li>Apri Clash of Clans in Google Play Games.</li>
+          <li>Se è a schermo intero, premi <kbd>F11</kbd> per uscirne.</li>
+          <li>Premi <strong>Start</strong> in BasePilot. Per farlo a mano: <strong>Settings → Resize game window to 16:9</strong>, poi <strong>Test</strong>.</li>
+          <li>Non ridurre Clash a icona mentre il bot gira: il bot vedrebbe tutto nero. Puoi coprirlo con altre finestre.</li>
+        </ol>
+        <p class="note">Monitor ultrawide (21:9) e il resize non basta? Premi <strong>Switch display to 16:9</strong>, chiudi e riapri Clash, poi <strong>Restore my display</strong>.</p>
+      </section>
+
+      <section id="bluestacks">
+        <h2>BlueStacks</h2>
+        <p>Da impostare una volta sola.</p>
+        <p class="where">In BlueStacks 5 (ingranaggio in basso a destra)</p>
+        <ol class="steps">
+          <li><strong>Settings → Advanced → Android Debug Bridge (ADB)</strong>: attivalo.</li>
+          <li><strong>Settings → Display → Resolution: 1920x1080</strong>. A 1600x900, il valore di partenza, il bot legge male i numeri del loot.</li>
+          <li>Tieni spento <strong>Eco mode</strong>: rallenta il gioco quando BlueStacks non è in primo piano.</li>
+          <li>Riavvia BlueStacks e apri Clash of Clans.</li>
+        </ol>
+        <p class="where">In BasePilot</p>
+        <ol class="steps">
+          <li><strong>Settings → Game runs in → BlueStacks</strong>, poi chiudi e riapri BasePilot.</li>
+          <li><strong>Settings → Test capture</strong>: deve comparire <em>Capture OK: 1920x1080</em>.</li>
+          <li>Premi <strong>Start</strong>. La finestra di BlueStacks può restare piccola o dietro altre.</li>
+        </ol>
+      </section>
+
+      <section id="novita">
+        <h2>Altre novità</h2>
+        <h3>Loot minimo (beta)</h3>
+        <p>In <strong>Settings → Minimum loot to attack</strong> imposti quanto oro, elisir ed elisir nero deve avere una base prima di attaccarla (0 = nessun minimo). Il bot preme Next finché ne trova una; dopo 30 salti attacca comunque.</p>
+        <p>È spento di default, può leggere male i numeri e ogni Next costa oro. Se lo attivi, controlla nel log le righe <em>Min loot: skipping base</em>. Funziona solo in 16:9.</p>
+        <h3>Aiuto al passaggio del mouse</h3>
+        <p>Ogni pulsante, interruttore e campo spiega cosa fa.</p>
+      </section>
+
+      <section id="problemi">
+        <h2>Problemi comuni</h2>
+        <table>
+          <thead><tr><th scope="col">Messaggio o problema</th><th scope="col">Cosa fare</th></tr></thead>
+          <tbody>
+            <tr><td data-label="Messaggio"><em>Aspect ratio not supported</em></td><td data-label="Cosa fare">Esci dallo schermo intero (<kbd>F11</kbd>) e premi di nuovo Start</td></tr>
+            <tr><td data-label="Messaggio"><em>The game is in full screen</em></td><td data-label="Cosa fare">Premi <kbd>F11</kbd> in Google Play Games, poi riprova</td></tr>
+            <tr><td data-label="Messaggio"><em>Window resized, but the game still renders…</em></td><td data-label="Cosa fare">Chiudi del tutto Clash e riaprilo, poi premi Start</td></tr>
+            <tr><td data-label="Messaggio"><em>Clash of Clans window not found</em></td><td data-label="Cosa fare">Apri il gioco, poi in Settings premi Refresh o Auto-detect</td></tr>
+            <tr><td data-label="Messaggio"><em>BlueStacks: turn on … Android Debug Bridge</em></td><td data-label="Cosa fare">In BlueStacks attiva Settings → Advanced → ADB, poi riapri BasePilot</td></tr>
+            <tr><td data-label="Messaggio"><em>BlueStacks not found over ADB</em></td><td data-label="Cosa fare">Apri BlueStacks con Clash e controlla che ADB sia attivo</td></tr>
+            <tr><td data-label="Messaggio"><em>Below 1920x1080: loot numbers may be misread</em></td><td data-label="Cosa fare">In BlueStacks: Settings → Display → 1920x1080</td></tr>
+            <tr><td data-label="Messaggio"><em>Android input motionevent is required</em></td><td data-label="Cosa fare">Mandaci la versione di Android di BlueStacks (Settings → About)</td></tr>
+            <tr><td data-label="Problema">Il bot vede tutto nero</td><td data-label="Cosa fare">Clash è ridotto a icona: riaprilo, anche dietro altre finestre</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="tester">
+        <h2>Per i tester</h2>
+        <p>Il resize e BlueStacks non sono ancora stati provati su un PC vero. Dopo la prova mandaci:</p>
+        <ul class="check">
+          <li>dove gira il gioco: Google Play Games o BlueStacks;</li>
+          <li>il messaggio di <strong>Test</strong> (Google Play Games) o di <strong>Test capture</strong> (BlueStacks);</li>
+          <li>con Google Play Games, la riga <em>Resize to 16:9</em> del log (Settings → Logs → Open in Explorer);</li>
+          <li>se lo Start si ferma, il messaggio esatto;</li>
+          <li>con BlueStacks, quanto dura un attacco completo;</li>
+          <li>con BlueStacks, se il bot continua a giocare con la finestra <strong>ridotta a icona</strong>: riducila durante una sessione e guarda se gli attacchi proseguono.</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</main>
+
+<footer>BasePilot è un progetto amatoriale, non affiliato a Supercell. <a href="https://github.com/Leixien/pixelchief">Codice su GitHub</a></footer>
+
+<script>
+  const root = document.documentElement;
+  const buttons = document.querySelectorAll('.switch button');
+  function apply(layout) {
+    root.dataset.layout = layout;
+    buttons.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.set === layout)));
+  }
+  buttons.forEach(b => b.addEventListener('click', () => {
+    apply(b.dataset.set);
+    try { localStorage.setItem('layout', b.dataset.set); } catch (e) {}
+  }));
+  apply(root.dataset.layout);
+
+  // Mark the section being read in the index.
+  const links = [...document.querySelectorAll('nav.toc a')];
+  const seen = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (!e.isIntersecting) return;
+      links.forEach(a => a.setAttribute('aria-current', String(a.hash === '#' + e.target.id)));
+      const active = links.find(a => a.hash === '#' + e.target.id);
+      if (active && root.dataset.layout === 'mobile') {
+        const strip = active.closest('ol');
+        strip.scrollLeft = active.offsetLeft - (strip.clientWidth - active.offsetWidth) / 2;
+      }
+    });
+  }, { rootMargin: '-30% 0px -60% 0px' });
+  document.querySelectorAll('section').forEach(s => seen.observe(s));
+</script>
+</body>
+</html>
