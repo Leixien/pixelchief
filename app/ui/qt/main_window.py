@@ -53,7 +53,7 @@ class MainWindow(QMainWindow):
         logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         logo.setPixmap(logo_pixmap(48))
         sidebar_col.addWidget(logo)
-        brand = QLabel(f'''<span style="color:{TOKENS['primary']}">Base</span><span style="color:{TOKENS['text']}">Pilot</span>''')
+        brand = QLabel(f'''<span style="color:{TOKENS['primary']}">Pixel</span><span style="color:{TOKENS['text']}">Chief</span>''')
         brand.setObjectName('Brand')
         brand.setAlignment(Qt.AlignmentFlag.AlignCenter)
         sidebar_col.addWidget(brand)

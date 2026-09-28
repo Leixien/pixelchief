@@ -2,7 +2,7 @@
 # PixelChief release stats. Usage: bash tools/release_stats.sh
 # Requires the GitHub CLI (gh auth login). Traffic needs push access to the repo.
 set -u
-REPO="${1:-efebolukbasi/BasePilot}"
+REPO="${1:-Leixien/pixelchief}"
 
 echo "=== $REPO ==="
 gh repo view "$REPO" --json stargazerCount,forkCount,watchers \
