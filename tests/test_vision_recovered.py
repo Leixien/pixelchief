@@ -103,6 +103,17 @@ class BlueStacksConfTests(unittest.TestCase):
         assert bluestacks_adb_ports('') == [5555]  # conf not found: BlueStacks' default port
 
 
+class LanguageHintTests(unittest.TestCase):
+
+    def test_hint_once_per_streak_of_missed_attack_searches(self):
+        from app.core.bot import Bot, _ATTACK_MISSES_BEFORE_HINT
+        said = []
+        fake = types.SimpleNamespace(_status_callback = said.append)
+        for found in [False] * (_ATTACK_MISSES_BEFORE_HINT + 2) + [True] + [False] * _ATTACK_MISSES_BEFORE_HINT:
+            Bot._note_attack_search(fake, found)
+        assert len(said) == 2 and 'English' in said[0], said  # one per streak, reset by a hit
+
+
 class RandomSessionLengthTests(unittest.TestCase):
 
     def test_range_normalization(self):

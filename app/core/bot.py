@@ -62,6 +62,11 @@ _LOOT_DELTA_MAX_DARK = 50000
 _MAX_BASE_SKIPS = 30
 _NEXT_SETTLE_SECONDS = 1.5  # after Next the old base stays on screen briefly before the clouds
 _NEXT_WAIT_TIMEOUT = 20
+# Consecutive Attack-button searches that time out before the user is told why. The button
+# is matched by its English label, so a game in another language never finds it.
+_ATTACK_MISSES_BEFORE_HINT = 3
+LANGUAGE_HINT = ('Attack button not found {n} times in a row. PixelChief reads the game in English only: '
+                 'in Clash of Clans open Settings -> Language and pick English.')
 _WALL_MENU_SCROLL_BASELINE: dict[str, tuple[int, int]] = {
     ASPECT_16_9: (1305, 605),
     ASPECT_16_10: (1305, 672) }
@@ -1138,6 +1143,21 @@ deselect, which would eat the upcoming Attack click.'''
         return False
 
     
+    def _note_attack_search(self, found):
+        '''Count Attack-button searches that timed out in a row; on the Nth, say the likely
+        cause (a game not in English) once per streak.'''
+        if found:
+            self._attack_misses = 0
+            return None
+        self._attack_misses = getattr(self, '_attack_misses', 0) + 1
+        if self._attack_misses == _ATTACK_MISSES_BEFORE_HINT:
+            msg = LANGUAGE_HINT.format(n = self._attack_misses)
+            logger.warning(msg)
+            cb = getattr(self, '_status_callback', None)
+            if cb:
+                cb(msg)
+
+
     def _wait_for_attack_with_nudge(self, timeout = 10, error = True):
         '''Poll bottom-half ``attack.png``; dismiss ``okay`` / ``exit`` popups first; else empty + scroll.'''
         start = time.time()
@@ -1166,10 +1186,12 @@ deselect, which would eat the upcoming Attack click.'''
             last_search = (frame, search_region)
             if ax:
                 self._home_trace('attack_found', frame, (ax, ay))
+                self._note_attack_search(found = True)
                 return (ax, ay, frame)
             self._nudge_view_to_reveal_attack()
             if self.stop_event.wait(0.35):
                 return (None, None, None)
+        self._note_attack_search(found = False)
         if error:
             logger.warning('Timeout waiting for attack.png')  # [recovered: decompiler misnested this inside the loop — it spammed once per poll]
         if last_search is not None:
@@ -1277,6 +1299,7 @@ deselect, which would eat the upcoming Attack click.'''
             if self.stop_event.wait(random.uniform(0.1, 0.25)):
                 return None
             (ax, ay) = self._wait_for_image('attack.png', timeout = 10)
+            self._note_attack_search(found = bool(ax))
             if not ax:
                 logger.warning('Builder Base: attack.png not found')
                 continue

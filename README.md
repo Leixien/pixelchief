@@ -95,6 +95,9 @@ Automation that spends resources has to be careful, so PixelChief:
 - Windows 10/11 for native Google Play Games control, or Windows/Linux/macOS for ADB
 - Clash of Clans running in **Google Play Games on PC** or on an ADB-connected Android device
 - The game rendering at **16:9** or 16:10
+- The game language set to **English** (in Clash: *Settings → Language*). Buttons are matched
+  by their English labels and menu rows are read in English; in another language the bot
+  finds no *Attack!* button, does nothing, and says so after three missed searches.
 
 **Window size:** no need to change your display resolution. On Start, PixelChief resizes the
 Google Play Games window so the game is 16:9, as large as your screen allows (also available
