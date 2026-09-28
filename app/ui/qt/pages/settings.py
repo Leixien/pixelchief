@@ -1,16 +1,17 @@
 '''Settings page — profile preferences and manual game-window selection.'''
 from __future__ import annotations
+import sys
 from threading import Thread
 from typing import List, Optional
 from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QColor, QFont
-from PySide6.QtWidgets import QComboBox, QDialog, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMainWindow, QSpinBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QButtonGroup, QComboBox, QDialog, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMainWindow, QSpinBox, QVBoxLayout, QWidget
 from app.config import resolve_aspect_key
 from app.services.display import DisplayService
-from app.services.adb import adb_options
+from app.services.adb import GAME_SOURCE_BLUESTACKS, GAME_SOURCE_GPG, adb_options, save_game_source, saved_game_source
 from app.services.window import DescendantInfo, WindowCandidate, WindowService
 from app.ui.qt.theme import SPACING, TOKENS
-from app.ui.qt.widgets import Card, PageTitle, SectionTitle, neutral_button, primary_button, set_help
+from app.ui.qt.widgets import Card, PageTitle, SectionTitle, neutral_button, primary_button, segment_button, set_help
 from app.utils.logger import setup_logger
 from app.utils.profile_settings_store import EARTHQUAKE_METHOD_OPTIONS, MIN_LOOT_MAX, RANDOM_MINUTES_CAP, RESERVE_BUILDERS_MAX, WALL_UPGRADE_THRESHOLD_M_MAX, ProfileSettings, load_profile_settings, save_profile_settings
 from app.utils.window_settings_store import clear_window_selection, load_window_selection, save_window_selection
@@ -222,13 +223,51 @@ class SettingsPage(QWidget):
         return card
 
     
+    def _add_game_source_row(self, card):
+        '''Windows only: Google Play Games (window capture) or BlueStacks (ADB).'''
+        if sys.platform != 'win32':
+            return None
+        card.card_layout.addWidget(SectionTitle('Game runs in'))
+        row = QHBoxLayout()
+        group = QButtonGroup(card)
+        group.setExclusive(True)
+        current = saved_game_source()
+        for label, source, help_text in (
+                ('Google Play Games', GAME_SOURCE_GPG, 'Clash of Clans in Google Play Games on PC: the bot reads and clicks the game window.'),
+                ('BlueStacks', GAME_SOURCE_BLUESTACKS, 'Clash of Clans in BlueStacks 5, controlled over ADB: the window can be small or behind others and your mouse stays free. In BlueStacks: Settings -> Advanced -> turn on Android Debug Bridge, and Settings -> Display -> 1920x1080.')):
+            btn = segment_button(label, parent = card)
+            btn.setChecked(source == current)
+            set_help(btn, help_text)
+            btn.clicked.connect(lambda _checked = False, s = source: self._on_game_source(s))
+            group.addButton(btn)
+            row.addWidget(btn)
+        row.addStretch()
+        card.card_layout.addLayout(row)
+        self._source_note = QLabel('')
+        self._source_note.setWordWrap(True)
+        self._source_note.setStyleSheet(f'''color: {TOKENS['text_muted']};''')
+        card.card_layout.addWidget(self._source_note)
+
+
+    def _on_game_source(self, source):
+        save_game_source(source)
+        same = source == saved_game_source()  # what this run is using (read once at startup)
+        self._source_note.setText('' if same else 'Saved. Close and reopen BasePilot to switch.')
+
+
     def _build_adb_card(self) -> Card:
         card = Card()
+        self._add_game_source_row(card)
         card.card_layout.addWidget(SectionTitle('Android device (ADB)'))
         self._adb_status = QLabel(
             f'Serial: {self._adb_serial or "auto-detect (one device required)"}\n'
             'Connect and authorize your Android device, then press Test capture.\n'
             'To choose another device, restart with --serial SERIAL.'
+            if saved_game_source() != GAME_SOURCE_BLUESTACKS else
+            'Open BlueStacks with Clash of Clans, then press Test capture. In BlueStacks: '
+            'Settings -> Advanced -> Android Debug Bridge on; Settings -> Display -> 1920x1080 '
+            '(the bot reads small numbers, lower resolutions misread them). The BlueStacks window '
+            'can be small or behind other windows.'
         )
         self._adb_status.setTextFormat(Qt.PlainText)
         self._adb_status.setWordWrap(True)
@@ -249,6 +288,8 @@ class SettingsPage(QWidget):
                 frame = window.screenshot()
                 h, w = frame.shape[:2]
                 message = f'Serial: {window.adb.serial}\nCapture OK: {w}x{h} (BGR).'
+                if w < 1920:
+                    message += '\nBelow 1920x1080: loot numbers may be misread. Raise the resolution in the emulator/device settings.'
             except Exception as exc:
                 message = str(exc)
             self._adb_result.emit(message)
@@ -264,6 +305,7 @@ class SettingsPage(QWidget):
         if self._use_adb:
             return self._build_adb_card()
         card = Card()
+        self._add_game_source_row(card)
         card.card_layout.addWidget(SectionTitle('Game window'))
         hint = QLabel("If the bot can't find Clash of Clans, pick the Google Play Games window below and press Test. Windows with a game surface are listed first.")
         hint.setWordWrap(True)

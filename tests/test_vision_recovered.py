@@ -92,6 +92,17 @@ class ResizeTo16x9Tests(unittest.TestCase):
         assert 2560 <= x and x + w <= 5120 and 0 <= y and y + h <= 1400
 
 
+class BlueStacksConfTests(unittest.TestCase):
+
+    def test_reads_instance_ports_and_adb_switch(self):
+        from app.services.adb import bluestacks_adb_disabled, bluestacks_adb_ports
+        conf = 'bst.enable_adb_access="1"\nbst.instance.Pie64.status.adb_port="5555"\nbst.instance.Pie64_1.status.adb_port="5565"\nbst.instance.Pie64.display_name="Pie"\n'
+        assert bluestacks_adb_ports(conf) == [5555, 5565]
+        assert not bluestacks_adb_disabled(conf)
+        assert bluestacks_adb_disabled(conf.replace('access="1"', 'access="0"'))
+        assert bluestacks_adb_ports('') == [5555]  # conf not found: BlueStacks' default port
+
+
 class RandomSessionLengthTests(unittest.TestCase):
 
     def test_range_normalization(self):

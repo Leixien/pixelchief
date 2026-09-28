@@ -188,11 +188,23 @@ pyinstaller BasePilot.spec
 binaries. The release workflow in `.github/workflows/release.yml` recreates it on a
 Windows runner and publishes the exe automatically on every `v*` tag.
 
+## Running in BlueStacks
+
+*Settings → Game runs in → BlueStacks*, then close and reopen BasePilot. The bot then
+drives BlueStacks 5 over ADB: the BlueStacks window can be small or behind other windows,
+and your mouse and keyboard stay free. In BlueStacks:
+
+- *Settings → Advanced → Android Debug Bridge (ADB)*: on.
+- *Settings → Display → 1920x1080*. Lower resolutions make the loot numbers misread.
+
+BasePilot uses BlueStacks' own `HD-Adb.exe` (no Platform Tools install needed) and connects
+to the first running instance on its ADB port. *Settings → Test capture* checks it.
+
 ## Running with ADB
 
 The bot uses `app.services.adb.AdbService` for Android screenshots and input on
 Windows, Linux, and macOS. ADB is the default on Linux/macOS; Windows keeps native
-window control unless `--adb` or `--serial` is supplied. The game runs on
+window control unless `--adb` or `--serial` is supplied, or BlueStacks is picked in Settings. The game runs on
 an Android device or an ADB-accessible emulator; BasePilot runs on the computer.
 
 Use Python 3.12+ and install [Android SDK Platform Tools](https://developer.android.com/tools/releases/platform-tools)

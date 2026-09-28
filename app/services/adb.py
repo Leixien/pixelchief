@@ -13,6 +13,35 @@ import time
 
 import cv2
 import numpy as np
+from functools import cache
+from pathlib import Path
+
+GAME_SOURCE_GPG = 'gpg'
+GAME_SOURCE_BLUESTACKS = 'bluestacks'
+_BLUESTACKS_DEFAULT_PORT = 5555
+
+
+def _game_source_path() -> Path:
+    from app.utils.common import get_user_app_data_dir
+    return get_user_app_data_dir() / 'game_source.json'
+
+
+@cache
+def saved_game_source() -> str:
+    '''Where the game runs, as chosen in Settings. Read once: a change needs a restart.'''
+    try:
+        import json
+        source = json.loads(_game_source_path().read_text(encoding='utf-8')).get('source')
+    except (OSError, ValueError, AttributeError):
+        return GAME_SOURCE_GPG
+    return source if source in (GAME_SOURCE_GPG, GAME_SOURCE_BLUESTACKS) else GAME_SOURCE_GPG
+
+
+def save_game_source(source: str) -> None:
+    import json
+    path = _game_source_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({'source': source}), encoding='utf-8')
 
 
 def adb_options() -> tuple[bool, str | None]:
@@ -20,7 +49,59 @@ def adb_options() -> tuple[bool, str | None]:
     parser.add_argument('--adb', action='store_true')
     parser.add_argument('--serial')
     options, _ = parser.parse_known_args()
-    return options.adb or options.serial is not None or sys.platform != 'win32', options.serial
+    use = options.adb or options.serial is not None or sys.platform != 'win32'
+    return use or saved_game_source() == GAME_SOURCE_BLUESTACKS, options.serial
+
+
+def _bluestacks_dirs() -> tuple[Path, Path]:
+    '''``(install dir, data dir)`` of BlueStacks 5, from the registry or the default paths.'''
+    install = Path(r'C:\Program Files\BlueStacks_nxt')
+    data = Path(r'C:\ProgramData\BlueStacks_nxt')
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r'SOFTWARE\BlueStacks_nxt') as key:
+            install = Path(winreg.QueryValueEx(key, 'InstallDir')[0])
+            data = Path(winreg.QueryValueEx(key, 'UserDefinedDir')[0])
+    except (ImportError, OSError):
+        pass
+    return install, data
+
+
+def bluestacks_adb() -> str | None:
+    '''BlueStacks' own adb (HD-Adb.exe): no separate Platform Tools install needed.'''
+    exe = _bluestacks_dirs()[0] / 'HD-Adb.exe'
+    return str(exe) if exe.is_file() else None
+
+
+def bluestacks_adb_ports(conf_text: str) -> list[int]:
+    '''ADB ports of the instances in ``bluestacks.conf``, default instance first.'''
+    ports = [int(p) for p in re.findall(r'^bst\.instance\.[^.]+\.status\.adb_port="(\d+)"', conf_text, re.M)]
+    return sorted(set(ports)) or [_BLUESTACKS_DEFAULT_PORT]
+
+
+def bluestacks_adb_disabled(conf_text: str) -> bool:
+    return re.search(r'^bst\.enable_adb_access="0"', conf_text, re.M) is not None
+
+
+def connect_bluestacks(adb: str) -> str:
+    '''``adb connect`` to the running BlueStacks instance; returns its serial.
+    BlueStacks also lists itself as ``emulator-5554``, so the explicit TCP serial is what
+    keeps "exactly one device" true.'''
+    conf = _bluestacks_dirs()[1] / 'bluestacks.conf'
+    try:
+        text = conf.read_text(encoding='utf-8', errors='replace')
+    except OSError:
+        text = ''
+    if bluestacks_adb_disabled(text):
+        raise RuntimeError('BlueStacks: turn on Settings -> Advanced -> Android Debug Bridge (ADB), then restart BasePilot.')
+    # ponytail: first instance that answers; add an instance picker if people run several at once.
+    for port in bluestacks_adb_ports(text):
+        serial = f'127.0.0.1:{port}'
+        subprocess.run([adb, 'connect', serial], capture_output=True, timeout=10)
+        out = subprocess.run([adb, 'devices'], capture_output=True, timeout=10).stdout.decode(errors='replace')
+        if f'{serial}\tdevice' in out:
+            return serial
+    raise RuntimeError('BlueStacks not found over ADB: open BlueStacks with Clash of Clans, and check Settings -> Advanced -> Android Debug Bridge is on.')
 
 
 _session: AdbService | None = None
@@ -32,7 +113,14 @@ def get_adb_service() -> AdbService:
     global _session
     with _session_lock:
         if _session is None:
-            _session = AdbService(adb_options()[1])
+            serial = adb_options()[1]
+            if saved_game_source() == GAME_SOURCE_BLUESTACKS:
+                adb = shutil.which('adb') or bluestacks_adb()
+                if adb is None:
+                    raise RuntimeError('ADB not found: install BlueStacks 5 or Android SDK Platform Tools.')
+                _session = AdbService(serial or connect_bluestacks(adb), adb=adb)
+            else:
+                _session = AdbService(serial)
         return _session
 
 
