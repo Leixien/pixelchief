@@ -352,6 +352,14 @@ class SettingsPage(QWidget):
         self._btn_resize_169.clicked.connect(self._on_resize_window_169)
         set_help(self._btn_resize_169, 'Resize the Clash of Clans window so the game is 16:9, as big as your screen allows. Start does this by itself. No need to change the display resolution.')
         disp_row.addWidget(self._btn_resize_169)
+        self._btn_hide = neutral_button('Hide game window', parent = card)
+        self._btn_hide.clicked.connect(self._on_hide_window)
+        set_help(self._btn_hide, 'Move the Clash window off the screen so it is out of your way while the bot plays. Do not minimize it instead: a minimized window cannot be seen by the bot. Show game window brings it back (BasePilot also does it on its next start).')
+        disp_row.addWidget(self._btn_hide)
+        self._btn_show = neutral_button('Show game window', parent = card)
+        self._btn_show.clicked.connect(self._on_show_window)
+        set_help(self._btn_show, 'Bring back the Clash window hidden with Hide game window.')
+        disp_row.addWidget(self._btn_show)
         self._btn_disp_169 = neutral_button('Switch display to 16:9', parent = card)
         self._btn_disp_169.clicked.connect(self._on_switch_display_169)
         set_help(self._btn_disp_169, 'Ultrawide monitors: set the display to a 16:9 resolution so the game starts at 16:9. Then fully close and reopen Clash.')
@@ -524,10 +532,31 @@ class SettingsPage(QWidget):
             'already_16_9': f'The game is already 16:9 ({size[0]}x{size[1]}).' if size else '',
             'adb': 'Android device (ADB): nothing to resize.',
             'not_found': 'Game window not found. Open Clash of Clans in Google Play Games, then Refresh.',
+            'minimized': 'The game is minimized. Restore it first.',
             'fullscreen': 'The game is in full screen. Press F11 in Google Play Games to leave full screen, then try again.',
             'not_16_9_after_resize': f'Window resized, but the game still renders {size[0]}x{size[1]}. Fully close and reopen Clash, or use Switch display to 16:9 below.' if size else ''}[reason]
         self._window_status.setText(text)
         self._flash_status_bar('Game window is 16:9' if ok else 'Resize failed')
+
+
+    def _on_hide_window(self):
+        (ok, reason) = WindowService().hide_offscreen()
+        self._window_status.setText({
+            'ok': 'Game window moved off the screen. Press Start as usual; Show game window brings it back.',
+            'already_hidden': 'The game window is already off the screen.',
+            'adb': 'Android device (ADB): nothing to hide.',
+            'not_found': 'Game window not found. Open Clash of Clans in Google Play Games, then Refresh.',
+            'minimized': 'The game is minimized. Restore it first, then press Hide game window.'}[reason])
+        self._flash_status_bar('Game window hidden' if ok else 'Hide failed')
+
+
+    def _on_show_window(self):
+        (ok, reason) = WindowService().show_back()
+        self._window_status.setText({
+            'ok': 'Game window is back on the screen.',
+            'not_hidden': 'The game window was not hidden by BasePilot.',
+            'not_found': 'Game window not found. Open Clash of Clans; BasePilot brings it back on its next start.'}[reason])
+        self._flash_status_bar('Game window shown' if ok else 'Show failed')
 
 
     def _on_switch_display_169(self):

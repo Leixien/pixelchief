@@ -85,6 +85,11 @@ is an optional callback used by the window-not-found dialog's 'Open configuratio
         _show_window_not_found_dialog(parent, on_configure)
         return False
     (w, h) = size
+    if ws.is_minimized():
+        from PySide6.QtWidgets import QMessageBox
+        from app.services.window import MINIMIZED_MESSAGE
+        QMessageBox.critical(parent, 'BasePilot', MINIMIZED_MESSAGE)
+        return False
     if resolve_aspect_key(w, h) != ASPECT_16_9:
         # Most users "fix" the aspect by changing the display resolution; resizing the
         # window does the job and leaves the desktop alone.

@@ -1,4 +1,5 @@
 import ctypes
+import json
 import time
 from ctypes import wintypes
 from dataclasses import dataclass
@@ -6,6 +7,7 @@ import numpy as np
 import cv2
 from PIL import Image
 from typing import List, Optional, Tuple
+from app.utils.common import get_user_app_data_dir
 from app.utils.logger import setup_logger
 from app.utils.window_settings_store import WindowSelection, load_window_selection
 from app.services.adb import AdbService, adb_options, get_adb_service
@@ -24,10 +26,19 @@ _GA_ROOT = 2
 _MONITOR_DEFAULTTONEAREST = 2
 _RESIZE_ATTEMPTS = 3  # the surface can settle a few px off (title bar, DPI rounding): re-measure and correct
 _RESIZE_SETTLE_SECONDS = 0.6
+_SWP_NOSIZE = 0x1
+_SM_XVIRTUALSCREEN = 76
+_OFFSCREEN_GAP = 200  # px left of the leftmost monitor, so no edge of the window shows
+MINIMIZED_MESSAGE = ('Clash of Clans is minimized: the bot cannot see a minimized Google Play Games window. '
+                     'Restore it (it can stay behind other windows), use Settings -> Hide game window, or play in BlueStacks.')
 
 
 class _MONITORINFO(ctypes.Structure):
     _fields_ = [('cbSize', wintypes.DWORD), ('rcMonitor', wintypes.RECT), ('rcWork', wintypes.RECT), ('dwFlags', wintypes.DWORD)]
+
+
+def _hidden_marker():
+    return get_user_app_data_dir() / 'hidden_window.json'
 
 
 def fit_16_9(surface, outer, work):
@@ -279,7 +290,7 @@ fails. Candidates with a CROSVM surface are sorted first.
     def resize_to_16_9(self):
         '''Resize the game's top-level window so its capture surface is 16:9, as large as the
 monitor's work area allows. Returns ``(ok, (w, h) | None, reason)``; reason is ``ok``,
-``already_16_9``, ``adb``, ``not_found``, ``fullscreen`` or ``not_16_9_after_resize``.'''
+``already_16_9``, ``adb``, ``not_found``, ``minimized``, ``fullscreen`` or ``not_16_9_after_resize``.'''
         from app.config import ASPECT_16_9, resolve_aspect_key
         if self.use_adb:
             return (False, None, 'adb')
@@ -290,7 +301,9 @@ monitor's work area allows. Returns ``(ok, (w, h) | None, reason)``; reason is `
             return (False, None, 'not_found')
         if resolve_aspect_key(*surface) == ASPECT_16_9:
             return (True, surface, 'already_16_9')
-        top = self.user32.GetAncestor(self.hwnd, _GA_ROOT) or self.hwnd
+        if self.is_minimized():
+            return (False, None, 'minimized')
+        top = self._top()
         info = _MONITORINFO()
         info.cbSize = ctypes.sizeof(_MONITORINFO)
         self.user32.GetMonitorInfoW(self.user32.MonitorFromWindow(top, _MONITOR_DEFAULTTONEAREST), ctypes.byref(info))
@@ -319,6 +332,61 @@ monitor's work area allows. Returns ``(ok, (w, h) | None, reason)``; reason is `
             logger.warning('Resize to 16:9: surface is %dx%d after resizing — the game keeps its own aspect', *surface)
             return (False, surface, 'not_16_9_after_resize')
         return (True, surface, 'ok')
+
+
+    def _top(self):
+        return self.user32.GetAncestor(self.hwnd, _GA_ROOT) or self.hwnd
+
+
+    def is_minimized(self):
+        '''A minimized window has no surface to capture: PrintWindow returns black.'''
+        if self.use_adb:
+            return False
+        if not self.hwnd:
+            self.find_window()
+        return bool(self.hwnd and self.user32.IsIconic(self._top()))
+
+
+    def hide_offscreen(self):
+        '''Park the game window left of every monitor. Capture (PrintWindow) and input
+(SendMessage) do not need it on screen, and unlike minimizing it keeps rendering.
+The old position is saved so :meth:`show_back` — or the next BasePilot start — puts it
+back even if BasePilot closes meanwhile. Returns ``(ok, reason)``.'''
+        if self.use_adb:
+            return (False, 'adb')
+        if not self.hwnd and not self.find_window():
+            return (False, 'not_found')
+        if self.is_minimized():
+            return (False, 'minimized')
+        top = self._top()
+        rect = wintypes.RECT()
+        self.user32.GetWindowRect(top, ctypes.byref(rect))
+        left_edge = self.user32.GetSystemMetrics(_SM_XVIRTUALSCREEN)
+        if rect.right <= left_edge:
+            return (True, 'already_hidden')
+        _hidden_marker().write_text(json.dumps({'x': rect.left, 'y': rect.top}), encoding = 'utf-8')
+        x = left_edge - (rect.right - rect.left) - _OFFSCREEN_GAP
+        self.user32.SetWindowPos(top, 0, x, rect.top, 0, 0, _SWP_NOSIZE | _SWP_NOZORDER | _SWP_NOACTIVATE)
+        logger.info('Game window hidden off-screen at x=%d (was %d,%d)', x, rect.left, rect.top)
+        return (True, 'ok')
+
+
+    def show_back(self):
+        '''Undo :meth:`hide_offscreen`. Returns ``(ok, reason)``.'''
+        marker = _hidden_marker()
+        if not marker.is_file():
+            return (False, 'not_hidden')
+        if self.use_adb or (not self.hwnd and not self.find_window()):
+            return (False, 'not_found')  # marker kept: the next start with the game open retries
+        try:
+            pos = json.loads(marker.read_text(encoding = 'utf-8'))
+            (x, y) = (int(pos['x']), int(pos['y']))
+        except (OSError, ValueError, KeyError, TypeError):
+            (x, y) = (0, 0)
+        self.user32.SetWindowPos(self._top(), 0, x, y, 0, 0, _SWP_NOSIZE | _SWP_NOZORDER | _SWP_NOACTIVATE)
+        marker.unlink(missing_ok = True)
+        logger.info('Game window back at (%d,%d)', x, y)
+        return (True, 'ok')
 
 
     def _resolve_hwnd(self, selection):
@@ -382,7 +450,8 @@ Outer window size in pixels (``GetWindowRect``), same basis as :meth:`screenshot
 
     
     def screenshot(self):
-        '''Captures a screenshot of the window.'''
+        '''Captures a screenshot of the window. Raises on a minimized Google Play Games window:
+its capture is black, and a bot working on black frames clicks blind.'''
         if self.use_adb:
             from app.config import resolve_aspect_key
             frame = self.adb.screenshot()
@@ -393,6 +462,8 @@ Outer window size in pixels (``GetWindowRect``), same basis as :meth:`screenshot
             return frame
         if not self.hwnd and self.find_window():
             return None
+        if self.is_minimized():
+            raise RuntimeError(MINIMIZED_MESSAGE)
         
         try:
             rect = wintypes.RECT()

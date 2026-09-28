@@ -32,6 +32,9 @@ def main():
             if not adb_options()[0]:
                 from app.services.display import DisplayService
                 DisplayService().restore_if_pending()
+                # A window hidden off-screen by the last run comes back, even after a crash.
+                from app.services.window import WindowService
+                WindowService().show_back()
         except Exception:
             logger.warning('Display restore-if-pending check failed', exc_info = True)
         logger.info('Starting Application...')
