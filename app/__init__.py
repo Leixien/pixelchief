@@ -1,2 +1,2 @@
 '''PixelChief — Clash of Clans farming and base-progression autopilot.'''
-__version__ = '1.0.11'
+__version__ = '1.0.12'
