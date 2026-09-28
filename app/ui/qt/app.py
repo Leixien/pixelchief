@@ -31,7 +31,7 @@ def _parse_autostart(argv):
 
 def run_gui():
     app = QApplication(sys.argv)
-    app.setApplicationName('BasePilot')
+    app.setApplicationName('PixelChief')
     apply_app_icon(app)
     apply_theme(app)
     window = MainWindow()

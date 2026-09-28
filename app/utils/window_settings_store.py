@@ -1,4 +1,4 @@
-'''Manual game-window selection (JSON) under LOCALAPPDATA\\BasePilot.
+'''Manual game-window selection (JSON) under LOCALAPPDATA\\PixelChief.
 
 Stores a stable identity (window title + top-level class + game-surface child class) so the
 correct Google Play Games window can be re-resolved across restarts, even when the HWND changes

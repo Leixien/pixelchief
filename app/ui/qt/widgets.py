@@ -1,4 +1,4 @@
-'''Reusable Qt widgets for the BasePilot UI.'''
+'''Reusable Qt widgets for the PixelChief UI.'''
 from __future__ import annotations
 import html
 from collections.abc import Callable

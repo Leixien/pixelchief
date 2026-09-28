@@ -93,7 +93,7 @@ def connect_bluestacks(adb: str) -> str:
     except OSError:
         text = ''
     if bluestacks_adb_disabled(text):
-        raise RuntimeError('BlueStacks: turn on Settings -> Advanced -> Android Debug Bridge (ADB), then restart BasePilot.')
+        raise RuntimeError('BlueStacks: turn on Settings -> Advanced -> Android Debug Bridge (ADB), then restart PixelChief.')
     # ponytail: first instance that answers; add an instance picker if people run several at once.
     for port in bluestacks_adb_ports(text):
         serial = f'127.0.0.1:{port}'

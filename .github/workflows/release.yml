@@ -49,8 +49,8 @@ jobs:
       # No UPX on the runner, so PyInstaller skips the spec's upx=True and emits
       # a larger but uncompressed exe. That is deliberate: UPX is known to corrupt
       # Qt DLLs, and an oversized exe beats one that will not start.
-      - name: Build BasePilot.exe
-        run: pyinstaller --noconfirm --clean BasePilot.spec
+      - name: Build PixelChief.exe
+        run: pyinstaller --noconfirm --clean PixelChief.spec
 
       - name: Run regression tests
         run: python -m unittest discover -s tests -v
@@ -60,11 +60,11 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          $smoke = Start-Process -FilePath (Resolve-Path 'dist\BasePilot.exe') -ArgumentList '--profile', 'release-smoke' -WindowStyle Hidden -PassThru
+          $smoke = Start-Process -FilePath (Resolve-Path 'dist\PixelChief.exe') -ArgumentList '--profile', 'release-smoke' -WindowStyle Hidden -PassThru
           try {
             Start-Sleep -Seconds 20
             $smoke.Refresh()
-            if ($smoke.HasExited) { throw "BasePilot exited during startup (code $($smoke.ExitCode))" }
+            if ($smoke.HasExited) { throw "PixelChief exited during startup (code $($smoke.ExitCode))" }
           } finally {
             if (-not $smoke.HasExited) { Stop-Process -Id $smoke.Id }
           }
@@ -72,20 +72,20 @@ jobs:
       - name: Verify build output
         shell: pwsh
         run: |
-          $exe = 'dist\BasePilot.exe'
-          if (-not (Test-Path $exe)) { throw 'Build produced no dist\BasePilot.exe' }
+          $exe = 'dist\PixelChief.exe'
+          if (-not (Test-Path $exe)) { throw 'Build produced no dist\PixelChief.exe' }
           $mb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
-          if ($mb -lt 30) { throw "BasePilot.exe is only $mb MB - the bundle looks incomplete" }
-          Write-Host "BasePilot.exe: $mb MB"
-          (Get-FileHash $exe -Algorithm SHA256).Hash | Tee-Object -FilePath dist\BasePilot.exe.sha256
+          if ($mb -lt 30) { throw "PixelChief.exe is only $mb MB - the bundle looks incomplete" }
+          Write-Host "PixelChief.exe: $mb MB"
+          (Get-FileHash $exe -Algorithm SHA256).Hash | Tee-Object -FilePath dist\PixelChief.exe.sha256
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BasePilot-windows
+          name: PixelChief-windows
           path: |
-            dist/BasePilot.exe
-            dist/BasePilot.exe.sha256
+            dist/PixelChief.exe
+            dist/PixelChief.exe.sha256
           retention-days: 14
 
       - name: Publish release
@@ -96,14 +96,14 @@ jobs:
         run: |
           set -euo pipefail
           tag="$GITHUB_REF_NAME"
-          assets=(dist/BasePilot.exe dist/BasePilot.exe.sha256)
+          assets=(dist/PixelChief.exe dist/PixelChief.exe.sha256)
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "${assets[@]}" --clobber
           else
             notes=".github/release-notes/$tag.md"
             if [ -f "$notes" ]; then
-              gh release create "$tag" "${assets[@]}" --title "BasePilot $tag" --notes-file "$notes"
+              gh release create "$tag" "${assets[@]}" --title "PixelChief $tag" --notes-file "$notes"
             else
-              gh release create "$tag" "${assets[@]}" --title "BasePilot $tag" --generate-notes
+              gh release create "$tag" "${assets[@]}" --title "PixelChief $tag" --generate-notes
             fi
           fi

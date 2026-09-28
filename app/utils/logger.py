@@ -3,7 +3,7 @@ import sys
 from logging.handlers import RotatingFileHandler
 from typing import Optional
 
-def setup_logger(name = 'BasePilot', log_file = None, level = logging.INFO):
+def setup_logger(name = 'PixelChief', log_file = None, level = logging.INFO):
     '''Configures and returns a logger instance.'''
     logger = logging.getLogger(name)
     logger.setLevel(level)

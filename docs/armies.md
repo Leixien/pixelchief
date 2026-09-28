@@ -1,6 +1,6 @@
 # Deploy mechanics
 
-What BasePilot actually does during a raid, for anyone tuning strategies or reading the code.
+What PixelChief actually does during a raid, for anyone tuning strategies or reading the code.
 
 For the recommended army and the setup that makes it work, see
 [Army setup](../README.md#army-setup) in the README.
@@ -26,7 +26,7 @@ filling the slot — the drag spreads whatever you're carrying along the edges.
 
 ## Earthquake placement
 
-BasePilot clicks **11 earthquake points** per raid, in one of two patterns
+PixelChief clicks **11 earthquake points** per raid, in one of two patterns
 (*Settings → Earthquake*):
 
 - **Curve placement** (default) — samples an arc through the left/top/right anchor points with

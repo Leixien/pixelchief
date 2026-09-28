@@ -38,7 +38,7 @@ Settings → Game window) so they can pick the correct window manually.
         from PySide6.QtWidgets import QMessageBox
         box = QMessageBox(parent)
         box.setIcon(QMessageBox.Icon.Critical)
-        box.setWindowTitle('BasePilot')
+        box.setWindowTitle('PixelChief')
         box.setText('Clash of Clans window not found.\nOpen the game, then press Start.')
         box.setInformativeText('If the game is already open, choose the correct window manually in Settings → Game window.')
         config_btn = None
@@ -88,7 +88,7 @@ is an optional callback used by the window-not-found dialog's 'Open configuratio
     if ws.is_minimized():
         from PySide6.QtWidgets import QMessageBox
         from app.services.window import MINIMIZED_MESSAGE
-        QMessageBox.critical(parent, 'BasePilot', MINIMIZED_MESSAGE)
+        QMessageBox.critical(parent, 'PixelChief', MINIMIZED_MESSAGE)
         return False
     if resolve_aspect_key(w, h) != ASPECT_16_9:
         # Most users "fix" the aspect by changing the display resolution; resizing the
@@ -103,7 +103,7 @@ is an optional callback used by the window-not-found dialog's 'Open configuratio
     try:
         from PySide6.QtWidgets import QMessageBox
         msg = 'Aspect ratio not supported and the game window could not be resized to 16:9. Exit full screen in Google Play Games (F11), then press Start again.'
-        QMessageBox.critical(parent, 'BasePilot', msg)
+        QMessageBox.critical(parent, 'PixelChief', msg)
         
         try:
             return False

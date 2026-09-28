@@ -252,7 +252,7 @@ class SettingsPage(QWidget):
     def _on_game_source(self, source):
         save_game_source(source)
         same = source == saved_game_source()  # what this run is using (read once at startup)
-        self._source_note.setText('' if same else 'Saved. Close and reopen BasePilot to switch.')
+        self._source_note.setText('' if same else 'Saved. Close and reopen PixelChief to switch.')
 
 
     def _build_adb_card(self) -> Card:
@@ -354,7 +354,7 @@ class SettingsPage(QWidget):
         disp_row.addWidget(self._btn_resize_169)
         self._btn_hide = neutral_button('Hide game window', parent = card)
         self._btn_hide.clicked.connect(self._on_hide_window)
-        set_help(self._btn_hide, 'Move the Clash window off the screen so it is out of your way while the bot plays. Do not minimize it instead: a minimized window cannot be seen by the bot. Show game window brings it back (BasePilot also does it on its next start).')
+        set_help(self._btn_hide, 'Move the Clash window off the screen so it is out of your way while the bot plays. Do not minimize it instead: a minimized window cannot be seen by the bot. Show game window brings it back (PixelChief also does it on its next start).')
         disp_row.addWidget(self._btn_hide)
         self._btn_show = neutral_button('Show game window', parent = card)
         self._btn_show.clicked.connect(self._on_show_window)
@@ -554,8 +554,8 @@ class SettingsPage(QWidget):
         (ok, reason) = WindowService().show_back()
         self._window_status.setText({
             'ok': 'Game window is back on the screen.',
-            'not_hidden': 'The game window was not hidden by BasePilot.',
-            'not_found': 'Game window not found. Open Clash of Clans; BasePilot brings it back on its next start.'}[reason])
+            'not_hidden': 'The game window was not hidden by PixelChief.',
+            'not_found': 'Game window not found. Open Clash of Clans; PixelChief brings it back on its next start.'}[reason])
         self._flash_status_bar('Game window shown' if ok else 'Show failed')
 
 

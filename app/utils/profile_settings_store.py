@@ -1,4 +1,4 @@
-'''Profile preferences (JSON) under LOCALAPPDATA\\BasePilot, next to ``player_list.json``.'''
+'''Profile preferences (JSON) under LOCALAPPDATA\\PixelChief, next to ``player_list.json``.'''
 from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass

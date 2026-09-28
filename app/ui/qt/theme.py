@@ -1,4 +1,4 @@
-'''BasePilot mission-control theme: OLED-dark instrument-panel QSS for the PySide6 UI.
+'''PixelChief mission-control theme: OLED-dark instrument-panel QSS for the PySide6 UI.
 
 Design system (ui-ux-pro-max "Dark Mode (OLED)" + Fira dashboard pairing): near-black
 background, slate instrument surfaces, GREEN as the "autopilot engaged" accent (red is

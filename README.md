@@ -1,10 +1,10 @@
-# BasePilot
+# PixelChief
 
-> Fork of [Mikyy85/coc-bot](https://github.com/Mikyy85/coc-bot) (BasePilot, MIT). The Python
+> Fork of [Mikyy85/coc-bot](https://github.com/Mikyy85/coc-bot) (BasePilot, MIT), renamed PixelChief in v1.0.10. The Python
 > sources here were reconstructed from the released bytecode, so some logic was lost in
 > decompilation and is being repaired commit by commit — expect differences from upstream.
 
-**Autopilot for your Clash of Clans base.** BasePilot farms, upgrades, and knows when
+**Autopilot for your Clash of Clans base.** PixelChief farms, upgrades, and knows when
 to do nothing — it runs unattended until your village genuinely has nothing left to
 start, then waits for a builder to free up and gets back to work.
 
@@ -13,15 +13,15 @@ ADB from Windows, Linux, or macOS. It plays the
 game the way a person does: screen capture, computer vision, and clicks. No memory
 reading, no packet manipulation, no modified client.
 
-**[Download the latest release](../../releases/latest)** — a single `BasePilot.exe`
+**[Download the latest release](../../releases/latest)** — a single `PixelChief.exe`
 with the OCR engine bundled in, so there is nothing to install. This repository holds
 the full source; see [Running from source](#running-from-source) to build it yourself.
 
-![BasePilot running beside Clash of Clans: the Run page shows Maxer mode with "Run until
+![PixelChief running beside Clash of Clans: the Run page shows Maxer mode with "Run until
 maxed" enabled, and the Live Status panel reports IDLING with 0/6 builders free and both
-storages full](docs/basepilot-screenshot.png)
+storages full](docs/pixelchief-screenshot.png)
 
-*BasePilot idling on purpose: storages are capped and every builder is busy, so it holds
+*PixelChief idling on purpose: storages are capped and every builder is busy, so it holds
 position and rechecks instead of raiding for loot that would overflow.*
 
 ---
@@ -34,7 +34,7 @@ disconnects, and stray screens. Builder Base farming included. See
 [Army setup](#army-setup) for what to bring.
 
 **Minimum loot (beta).** The loot numbers can be misread, so a good base may be skipped; check the log. *Settings → Minimum loot to attack* sets a separate minimum for gold, elixir
-and dark elixir (0 = ignored). BasePilot reads each scouted base's *Available Loot* and presses
+and dark elixir (0 = ignored). PixelChief reads each scouted base's *Available Loot* and presses
 **Next** until one meets every minimum; after 30 skips, or on an unreadable screen, it attacks
 the base in front of it. 16:9 only for now (`enemy_loot` / `next_button` in `data.json`).
 
@@ -54,7 +54,7 @@ priced in gems, free cards (the tutorial Walls) and prices shown in red are neve
 nothing happens without a free builder above *Reserve builders*. 16:9 only for now.
 
 **Run until maxed.** No time limit. Farm → spend → and when storages are full with
-every builder busy, BasePilot **idles** instead of raiding for loot that would
+every builder busy, PixelChief **idles** instead of raiding for loot that would
 overflow, rechecking every few minutes and resuming the moment something frees up.
 It only stops when you tell it to.
 
@@ -74,12 +74,12 @@ glance, alongside the loot readout.
 Works at **any Town Hall level** — detection reads the game's own UI signals (builder
 chip, lab chip, storage indicators) rather than hardcoded per-TH values.
 
-Not automated yet: starting laboratory research and Pet House upgrades. BasePilot
+Not automated yet: starting laboratory research and Pet House upgrades. PixelChief
 tracks the lab and tells you when it's idle, but you start those two yourself.
 
 ## Safety rails
 
-Automation that spends resources has to be careful, so BasePilot:
+Automation that spends resources has to be careful, so PixelChief:
 
 - Never confirms a purchase whose cost shows red (unaffordable → gem-spend risk).
 - Requires the screen to **name the building it picked** before any purchase click, so
@@ -87,7 +87,7 @@ Automation that spends resources has to be careful, so BasePilot:
 - Verifies every upgrade actually started by checking the builder counter afterward.
 - Escapes unknown dialogs via their close button or empty ground — never a blind "OK".
 - Keeps a gold buffer so matchmaking entry fees are never spent away.
-- Screenshots anything it couldn't verify to `%LOCALAPPDATA%\BasePilot\debug\` and
+- Screenshots anything it couldn't verify to `%LOCALAPPDATA%\PixelChief\debug\` and
   benches that upgrade instead of retrying blindly.
 
 ## Requirements
@@ -96,9 +96,11 @@ Automation that spends resources has to be careful, so BasePilot:
 - Clash of Clans running in **Google Play Games on PC** or on an ADB-connected Android device
 - The game rendering at **16:9** or 16:10
 
-**Window size:** no need to change your display resolution. On Start, BasePilot resizes the
+**Window size:** no need to change your display resolution. On Start, PixelChief resizes the
 Google Play Games window so the game is 16:9, as large as your screen allows (also available
-as *Settings → Resize game window to 16:9*). Leave full screen first (F11).
+as *Settings → Resize game window to 16:9*). Leave full screen first (F11). Do not minimize
+the game: a minimized window captures black and the bot stops. *Settings → Hide game window*
+moves it off the screen instead, and *Show game window* (or the next start) brings it back.
 
 **Ultrawide / 21:9 monitors:** if resizing is not enough (Google Play Games can lock the aspect to your
 display resolution at launch), use *Settings → Switch display to 16:9*, fully close and
@@ -106,10 +108,10 @@ reopen Clash, then *Restore my display* — the running game keeps 16:9.
 
 ## Getting started
 
-1. Download `BasePilot.exe` from [Releases](../../releases/latest) and run it (no
-   installer; settings live in `%LOCALAPPDATA%\BasePilot`). The exe is unsigned, so
+1. Download `PixelChief.exe` from [Releases](../../releases/latest) and run it (no
+   installer; settings live in `%LOCALAPPDATA%\PixelChief`). The exe is unsigned, so
    Windows SmartScreen warns on first launch — *More info → Run anyway*.
-2. Open the game, then press **Test** on the Settings page to confirm BasePilot can see
+2. Open the game, then press **Test** on the Settings page to confirm PixelChief can see
    it. Use **Auto-detect** or pick the window manually if needed.
 3. On the Run page, choose your army ([what to bring](#army-setup)), set
    **Auto upgrade → Dry run** for the first session, and press **Start**. Watch the Logs page
@@ -120,7 +122,7 @@ reopen Clash, then *Restore my display* — the running game keeps 16:9.
 Command line, for scheduled or overnight runs:
 
 ```
-BasePilot.exe --autostart --minutes 0 --walls --upgrades maxer
+PixelChief.exe --autostart --minutes 0 --walls --upgrades maxer
 ```
 
 `--minutes 0` means run until maxed. `--upgrades off|dry|maxer|rusher`.
@@ -133,24 +135,24 @@ Queen, King, Warden, and Royal Champion and their pets](docs/army-valkyrie.png)
 **42 Valkyries · 11 Earthquake spells · 1 Log Launcher**, plus your heroes and pets — 336/352
 housing and a full 11/11 spell bar.
 
-The 11 Earthquakes aren't arbitrary. BasePilot places exactly 11 earthquake points per raid, so
+The 11 Earthquakes aren't arbitrary. PixelChief places exactly 11 earthquake points per raid, so
 a full spell bar means every one of them lands a spell.
 
 Three things to get right before you press Start:
 
 - **Be on the Home Village.** Switch there yourself, or pick *Home Village* in the app and let
   the bot switch for you.
-- **Use the default deployment bar layout.** Two rows is fine. BasePilot finds troops by
+- **Use the default deployment bar layout.** Two rows is fine. PixelChief finds troops by
   matching their icons in that bar, so a customised layout can hide them.
 - **Keep this army at the top of your Saved Recipes.** If Valkyries aren't already in your
-  deploy bar, BasePilot opens Saved Recipes and clicks **Use** next to the Valkyrie row — but it
+  deploy bar, PixelChief opens Saved Recipes and clicks **Use** next to the Valkyrie row — but it
   only looks for that button close to the row it matched, so a recipe further down the list
   scrolls out of range and army loading fails.
 
 If the troop you picked on the Run page isn't in your army, the raid aborts immediately and the
 log reads `Troop <name> not found!`.
 
-**New village.** A fresh account has none of the troops above. Pick *New village* and BasePilot
+**New village.** A fresh account has none of the troops above. Pick *New village* and PixelChief
 selects every filled slot of the deployment bar in turn, left to right, and drops it on the map
 border — whatever the Town Hall has unlocked, spells and heroes included once they appear. It
 stops at the first empty (dashed) slot, and an empty bar counts as missing troops. Slot
@@ -170,18 +172,18 @@ python -m pip install -r requirements.txt
 python main.py
 ```
 
-OCR needs a Tesseract 5 install. For development, BasePilot falls back to
+OCR needs a Tesseract 5 install. For development, PixelChief falls back to
 `C:\Program Files\Tesseract-OCR\tesseract.exe`, so a
 [UB-Mannheim build](https://github.com/UB-Mannheim/tesseract/wiki) is enough — or point
 `TESSERACT_CMD` at the executable you prefer. On Linux/macOS, install Tesseract
-and its English language data using your OS package manager; BasePilot also
+and its English language data using your OS package manager; PixelChief also
 looks for `tesseract` on PATH. An explicit `TESSDATA_PREFIX` is preserved.
 
 To build the one-file exe, copy that Tesseract install (`tesseract.exe`, its DLLs, and
 `tessdata/`) into `tesseract_bundle/` and run:
 
 ```
-pyinstaller BasePilot.spec
+pyinstaller PixelChief.spec
 ```
 
 `tesseract_bundle/` is gitignored to keep the repo light — it is ~40 MB of Apache-2.0
@@ -190,14 +192,14 @@ Windows runner and publishes the exe automatically on every `v*` tag.
 
 ## Running in BlueStacks
 
-*Settings → Game runs in → BlueStacks*, then close and reopen BasePilot. The bot then
+*Settings → Game runs in → BlueStacks*, then close and reopen PixelChief. The bot then
 drives BlueStacks 5 over ADB: the BlueStacks window can be small or behind other windows,
 and your mouse and keyboard stay free. In BlueStacks:
 
 - *Settings → Advanced → Android Debug Bridge (ADB)*: on.
 - *Settings → Display → 1920x1080*. Lower resolutions make the loot numbers misread.
 
-BasePilot uses BlueStacks' own `HD-Adb.exe` (no Platform Tools install needed) and connects
+PixelChief uses BlueStacks' own `HD-Adb.exe` (no Platform Tools install needed) and connects
 to the first running instance on its ADB port. *Settings → Test capture* checks it.
 
 ## Running with ADB
@@ -205,7 +207,7 @@ to the first running instance on its ADB port. *Settings → Test capture* check
 The bot uses `app.services.adb.AdbService` for Android screenshots and input on
 Windows, Linux, and macOS. ADB is the default on Linux/macOS; Windows keeps native
 window control unless `--adb` or `--serial` is supplied, or BlueStacks is picked in Settings. The game runs on
-an Android device or an ADB-accessible emulator; BasePilot runs on the computer.
+an Android device or an ADB-accessible emulator; PixelChief runs on the computer.
 
 Use Python 3.12+ and install [Android SDK Platform Tools](https://developer.android.com/tools/releases/platform-tools)
 for your computer's OS. Make `adb` available on PATH, or pass its executable path
@@ -305,7 +307,7 @@ Apache 2.0 license.
 ## Disclaimer
 
 Automating Clash of Clans **violates Supercell's Terms of Service and can get your
-account banned.** BasePilot is published for educational purposes — it's a real-world
+account banned.** PixelChief is published for educational purposes — it's a real-world
 exercise in computer vision, OCR, and UI automation against an animated, adversarial
 target. Use it on an account you're willing to lose, or don't use it at all. No
 warranty; you accept all risk.

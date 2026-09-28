@@ -13,7 +13,7 @@ layout-agnostic: clicking a row may select the building (bottom-bar Upgrade butt
 open a hero/building screen, or jump straight to the confirm dialog — all of them
 surface an "Upgrade" word in the bottom band, and clicking it walks the chain (at most
 two hops) to the green confirm. Every uncertain frame is dumped to
-``%LOCALAPPDATA%\\BasePilot\\debug\\upgexec_*.jpg`` and every abort escapes via
+``%LOCALAPPDATA%\\PixelChief\\debug\\upgexec_*.jpg`` and every abort escapes via
 exit/empty-tap — never a blind confirm (gem guard: a red cost zone under the word
 vetoes the click).
 

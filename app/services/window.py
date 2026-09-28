@@ -350,8 +350,8 @@ monitor's work area allows. Returns ``(ok, (w, h) | None, reason)``; reason is `
     def hide_offscreen(self):
         '''Park the game window left of every monitor. Capture (PrintWindow) and input
 (SendMessage) do not need it on screen, and unlike minimizing it keeps rendering.
-The old position is saved so :meth:`show_back` — or the next BasePilot start — puts it
-back even if BasePilot closes meanwhile. Returns ``(ok, reason)``.'''
+The old position is saved so :meth:`show_back` — or the next PixelChief start — puts it
+back even if PixelChief closes meanwhile. Returns ``(ok, reason)``.'''
         if self.use_adb:
             return (False, 'adb')
         if not self.hwnd and not self.find_window():

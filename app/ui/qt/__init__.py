@@ -1,1 +1,1 @@
-'''PySide6 UI for BasePilot.'''
+'''PySide6 UI for PixelChief.'''

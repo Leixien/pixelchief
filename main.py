@@ -1,4 +1,4 @@
-'''Entry point for the BasePilot GUI.'''
+'''Entry point for the PixelChief GUI.'''
 from __future__ import annotations
 import os
 import sys

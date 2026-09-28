@@ -15,21 +15,23 @@ def get_resource_path(relative_path):
 
 
 
-APP_NAME = 'BasePilot'
-_LEGACY_DATA_DIR_NAME = 'ClashAutoLoot'  # pre-rebrand data dir; migrated on first use
+APP_NAME = 'PixelChief'
+# Data dirs of earlier names, newest first; the first one found is migrated on first use.
+_LEGACY_DATA_DIR_NAMES = ('BasePilot', 'ClashAutoLoot')
 _migration_checked = False
 
 
 def _legacy_data_dir():
-    if sys.platform == 'win32':
-        local = os.environ.get('LOCALAPPDATA')
-        if local:
-            return Path(local) / _LEGACY_DATA_DIR_NAME
-    return Path.home() / '.local' / 'share' / _LEGACY_DATA_DIR_NAME
+    local = os.environ.get('LOCALAPPDATA') if sys.platform == 'win32' else None
+    base = Path(local) if local else Path.home() / '.local' / 'share'
+    for name in _LEGACY_DATA_DIR_NAMES:
+        if (base / name).is_dir():
+            return base / name
+    return base / _LEGACY_DATA_DIR_NAMES[0]
 
 
 def _maybe_migrate_legacy_data(new_dir):
-    '''One-time settings migration from the pre-rebrand data dir: copy the small
+    '''One-time settings migration from a pre-rebrand data dir: copy the small
     user-state files (settings, player list, window pin, display restore) — never
     logs or debug frames. Idempotent: skipped once the new dir holds settings.'''
     global _migration_checked
@@ -54,7 +56,7 @@ def _maybe_migrate_legacy_data(new_dir):
 
 
 def get_user_app_data_dir():
-    '''Per-user writable data (Windows: LOCALAPPDATA\\BasePilot).'''
+    '''Per-user writable data (Windows: LOCALAPPDATA\\PixelChief).'''
     if sys.platform == 'win32':
         local = os.environ.get('LOCALAPPDATA')
         if local:
@@ -68,9 +70,9 @@ def get_user_app_data_dir():
 
 
 def get_log_path():
-    '''Path to the rotating ``basepilot.log`` in the per-user data dir.'''
+    '''Path to the rotating ``pixelchief.log`` in the per-user data dir.'''
     ensure_dir(get_user_app_data_dir())
-    return get_user_app_data_dir() / 'basepilot.log'
+    return get_user_app_data_dir() / 'pixelchief.log'
 
 
 # Back-compat alias (old name used across the decompiled tree).

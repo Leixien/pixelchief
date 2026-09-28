@@ -4,14 +4,14 @@ set "BP_DIR=%~dp0"
 powershell -NoProfile -Command "iex (Get-Content -LiteralPath '%~f0' -Raw)"
 exit /b
 #>
-# Chiede durata, potenziamenti e mura, poi avvia BasePilot. Va nella stessa cartella di BasePilot.exe.
+# Chiede durata, potenziamenti e mura, poi avvia PixelChief. Va nella stessa cartella di PixelChief.exe.
 Add-Type -AssemblyName System.Windows.Forms
 [Windows.Forms.Application]::EnableVisualStyles()
 
-$exe = Join-Path $env:BP_DIR 'BasePilot.exe'
-if (-not (Test-Path $exe)) { [void][Windows.Forms.MessageBox]::Show("Non trovo $exe", 'BasePilot'); exit }
+$exe = Join-Path $env:BP_DIR 'PixelChief.exe'
+if (-not (Test-Path $exe)) { [void][Windows.Forms.MessageBox]::Show("Non trovo $exe", 'PixelChief'); exit }
 
-$form = New-Object Windows.Forms.Form -Property @{ Text = 'BasePilot'; FormBorderStyle = 'FixedDialog'; StartPosition = 'CenterScreen'; MaximizeBox = $false; MinimizeBox = $false; AutoSize = $true; AutoSizeMode = 'GrowAndShrink'; TopMost = $true }
+$form = New-Object Windows.Forms.Form -Property @{ Text = 'PixelChief'; FormBorderStyle = 'FixedDialog'; StartPosition = 'CenterScreen'; MaximizeBox = $false; MinimizeBox = $false; AutoSize = $true; AutoSizeMode = 'GrowAndShrink'; TopMost = $true }
 $grid = New-Object Windows.Forms.TableLayoutPanel -Property @{ ColumnCount = 2; AutoSize = $true; Padding = 10 }
 $minutes = New-Object Windows.Forms.NumericUpDown -Property @{ Minimum = 1; Maximum = 999; Value = 60 }
 $mode = New-Object Windows.Forms.ComboBox -Property @{ DropDownStyle = 'DropDownList'; Width = 240 }
@@ -35,5 +35,5 @@ $argv = @('--autostart', '--minutes', "$([int]$minutes.Value)", '--upgrades', $m
 if ($walls.Checked) { $argv += '--walls' }
 
 # Finita la sessione la finestra resta aperta, e due copie cliccherebbero sullo stesso gioco.
-Get-Process BasePilot -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process PixelChief -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Process $exe -ArgumentList $argv

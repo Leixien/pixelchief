@@ -30,10 +30,10 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('BasePilot')
+        self.setWindowTitle('PixelChief')
         self.resize(*WINDOW_DEFAULT)
         self.setMinimumSize(*WINDOW_MIN)
-        self._settings = QSettings('BasePilot', 'UI')
+        self._settings = QSettings('BasePilot', 'UI')  # pre-rename key: keeps saved UI choices
         self._migrate_legacy_ui_settings()
         self._controller = BotController(bot_version = __version__)
         self._taskbar = None

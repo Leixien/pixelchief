@@ -1,4 +1,4 @@
-'''Logs page — tail basepilot.log in the UI.'''
+'''Logs page — tail pixelchief.log in the UI.'''
 from __future__ import annotations
 import os
 import subprocess

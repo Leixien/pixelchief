@@ -3,8 +3,8 @@ from __future__ import annotations
 from PySide6.QtGui import QIcon, QPixmap
 from app.utils.common import get_resource_path
 _ICON: 'QIcon | None' = None
-LOGO_PNG = 'assets/basepilot_logo.png'
-LOGO_ICO = 'assets/basepilot_logo.ico'
+LOGO_PNG = 'assets/pixelchief_logo.png'
+LOGO_ICO = 'assets/pixelchief_logo.ico'
 
 def app_icon():
     '''Return the cached application icon (ICO preferred on Windows).'''
